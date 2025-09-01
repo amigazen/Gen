@@ -42,6 +42,9 @@
 #include <proto/datatypes.h>
 #include <proto/utility.h>
 
+static const char *verstag = "$VER: GenIn 1.0 (01/09/25)";
+static const char *stack_cookie = "$STACK: 4096";
+
 /* Simple strlen function since utility.library doesn't have it */
 LONG my_strlen(const char *str)
 {
