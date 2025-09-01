@@ -1,6 +1,6 @@
-# _gen_ 
+# _Gen_ 
 
-This is _gen_, a set of build and package management tools for Amiga, of amigazen project ToolKit.
+This is _Gen_, a set of build and package management tools for Amiga, of amigazen project ToolKit.
 
 ## [amigazen project](http://www.amigazen.com)
 
@@ -22,9 +22,9 @@ Our philosophy is based on openness:
 
 PRs for all amigazen projects are gratefully received at [GitHub](https://github.com/amigazen/). While the amigazen project focus now is on classic 68k software, it is intended that all amigazen project releases can be ported to other Amiga and Amiga-like systems including AROS and MorphOS where feasible.
 
-## About _gen_
+## About _Gen_
 
-_gen_ is a set of build and package management tools for Amiga software development, designed to be used with the amigazen project ToolKit. It consists of several tools to help with creating and managing SDK components and software releases, including:
+_Gen_ is a set of build and package management tools for Amiga software development, designed to be used with the amigazen project ToolKit. It consists of several tools to help with creating and managing SDK components and software releases, including:
 
 - GenIn - a command line tool to create Amiga "DiskObjects" AKA .info files, Amiga's native icon and metadata file format.
 - GenKei - a command line tool to generate project templates (Coming Soon).
@@ -35,7 +35,7 @@ The word _gen_ means current, actual or realized, but also more poetically can b
 
 ### GenIn
 
-GenIn is the first tool released as part of the _gen_ project - a command line tool for automatically manifesting or _gen_-erating _in_-fo files during a build process or indeed any script. 
+GenIn is the first tool released as part of the _Gen_ project - a command line tool for automatically manifesting or _gen_-erating _in_-fo files during a build process or indeed any script. 
 
 The name GenIn is inspired, like the Gen project itself, as well as some of the other amigazen project releases, by the Japanese syllables *gen* and *in* (現印) meaning together *genin* or 'manifested stamp, seal or symbol'. 
 

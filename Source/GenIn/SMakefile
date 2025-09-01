@@ -35,7 +35,7 @@ clean:
 
 # Install target
 install:
-	copy $(PROGRAM) TO: C:
+	copy $(PROGRAM) CLONE TO //SDK/C/
 
 # Help target
 help:
@@ -44,5 +44,3 @@ help:
 	@echo "  clean    - Remove build artifacts"
 	@echo "  install  - Install to C: directory"
 	@echo "  help     - Show this help"
-
-.PHONY: all clean install help 
