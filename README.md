@@ -14,8 +14,6 @@ This is _Gen_, a set of build and package management tools for Amiga, of amigaze
 
 Key to the amigazen project approach is ensuring every project can be built with the same common set of development tools and configurations, so the ToolKit was created to provide a standard configuration for Amiga development. All *amigazen project* releases will be guaranteed to build against the ToolKit standard so that anyone can download and begin contributing straightaway without having to tailor the toolchain for their own setup.
 
-The original authors of the libraries and commands included here are not affiliated with the amigazen project. This software is redistributed on terms described in the documentation, particularly the file LICENSE.md and individual LICENSE.md files for each component.
-
 Our philosophy is based on openness:
 
 *Open* to anyone and everyone	- *Open* source and free for all	- *Open* your mind and create!
@@ -26,24 +24,24 @@ PRs for all amigazen projects are gratefully received at [GitHub](https://github
 
 _Gen_ is a set of build and package management tools for Amiga software development, designed to be used with the amigazen project ToolKit. It consists of several tools to help with creating and managing SDK components and software releases, including:
 
-- GenIn - a command line tool to create Amiga "DiskObjects" AKA .info files, Amiga's native icon and metadata file format.
-- GenKei - a command line tool to generate project templates (Coming Soon).
-- GenGen - a command line tool to generate manifest files for Gen packages (Coming Later).
-- KaiZen - a command line tool to automatically apply updates to ToolKit (Coming Much Later).
+- **GenIn** - a command line tool to create Amiga "DiskObjects" AKA .info files, Amiga's native icon and metadata file format.
+- **GenKei** - a command line tool to generate project templates (Coming Soon).
+- **GenGen** - a command line tool to generate manifest files for Gen packages (Coming Later).
+- **KaiZen** - a command line tool to automatically apply updates to ToolKit (Coming Much Later).
 
-The word _gen_ means current, actual or realized, but also more poetically can be interpreted as 'manifest' in the sense of manifesting something into existence. It's a happy coincidence that the word root gen- in european languages means 'create'.
+In Japanese, the syllable _gen_ means current, actual or realized, but also more poetically can be interpreted as 'manifest' in the sense of manifesting something into existence. It's a happy coincidence that the word root gen- in european languages means 'create'.
 
 ### GenIn
 
 GenIn is the first tool released as part of the _Gen_ project - a command line tool for automatically manifesting or _gen_-erating _in_-fo files during a build process or indeed any script. 
 
-The name GenIn is inspired, like the Gen project itself, as well as some of the other amigazen project releases, by the Japanese syllables *gen* and *in* (現印) meaning together *genin* or 'manifested stamp, seal or symbol'. 
+The name GenIn is inspired, like the Gen project itself, by the Japanese syllables *gen* and *in* (現印) meaning together *genin* or 'manifested stamp, seal or symbol'. 
 
 ### GenKei
 
 GenKei creates new code skeletons for a variety of different kinds of Amiga software development Projects according to a set of templates, implementing best practices for startup, API management, directory structure etc.
 
-The name GenKei is also inspired, like the Gen project itself, as well as some of the other amigazen project releases, by the Japanese syllables *gen* and *kei* (原型) meaning together *genkei* or 'prototype or pattern'. 
+The name GenKei is also inspired, like the Gen project itself, by the Japanese syllables *gen* and *kei* (原型) meaning together *genkei* or 'prototype or pattern'. 
 
 ### GenGen
 
