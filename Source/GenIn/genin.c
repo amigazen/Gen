@@ -857,7 +857,9 @@ struct DiskObject *load_standard_deficon(STRPTR type)
         def_type = WBTOOL;
     } else if (Stricmp(type, "project") == 0) {
         def_type = WBPROJECT;
-    } else if (Stricmp(type, "garbage") == 0) {
+    } else if (Stricmp(type, "trash") == 0) { 
+        def_type = WBGARBAGE;
+    } else if (Stricmp(type, "garbage") == 0) { 
         def_type = WBGARBAGE;
     } else if (Stricmp(type, "kick") == 0) {
         def_type = WBKICK;
