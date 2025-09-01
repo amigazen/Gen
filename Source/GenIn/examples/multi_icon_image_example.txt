@@ -1,0 +1,24 @@
+; Multi-icon example specification file - IMAGE version
+; This file demonstrates multiple icon definitions separated by blank lines
+; Comments start with ';' and continue to the end of the line
+; This version uses IMAGE keywords instead of DEFICON
+
+; First icon: A tool with custom image
+TYPE=tool
+TARGET=myapp
+STACK=8192
+TOOLTYPE=CX_POPUP=YES
+TOOLTYPE=CX_HOTKEY="RAMIGA I"
+TOOLTYPE=REQUIRES=graphics.library
+IMAGE=myicon.png
+
+; Second icon: A project with custom image
+TYPE=project
+TARGET=myproject
+IMAGE=project_icon.iff
+
+; Third icon: A drawer with custom image
+TYPE=drawer
+TARGET=mydrawer
+IMAGE=drawer_icon.iff
+TOOLTYPE=WINDOW=myapp 

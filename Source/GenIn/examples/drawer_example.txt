@@ -1,0 +1,6 @@
+# Example drawer icon specification
+# This creates a drawer icon with custom image
+
+TYPE=drawer
+TARGET=mydrawer.info
+IMAGE=drawer_icon.iff 

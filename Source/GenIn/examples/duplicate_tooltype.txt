@@ -1,0 +1,9 @@
+# Example with duplicate TOOLTYPE keys (should fail)
+# This tests the duplicate key validation
+
+TYPE=tool
+TARGET=duplicate_test.info
+STACK=8192
+TOOLTYPE=CX_POPUP=YES
+TOOLTYPE=CX_POPUP=NO
+DEFICON=ilbm

@@ -1,0 +1,10 @@
+# Example tool icon specification
+# This creates a tool icon with custom image and multiple tooltypes
+
+TYPE=tool
+TARGET=myapp.info
+STACK=8192
+TOOLTYPE=CX_POPUP=YES
+TOOLTYPE=CX_HOTKEY="ramiga i"
+TOOLTYPE=REQUIRES=graphics.library
+IMAGE=myicon.png

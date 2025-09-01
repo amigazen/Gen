@@ -1,0 +1,48 @@
+# GenIn SMakefile
+# Amiga .info file generator tool
+
+# Program name
+PROGRAM = GenIn
+
+# Source files
+SRCS = genin.c
+
+# Object files
+OBJS = genin.o
+
+# Compiler and linker
+CC = sc
+LINK = slink
+
+# Default target
+all: $(PROGRAM)
+
+# Create the executable
+$(PROGRAM): $(OBJS)
+	$(LINK) FROM sc:lib/c.o $(OBJS) TO $(PROGRAM) STRIPDEBUG NODEBUG LIB sc:lib/sc.lib lib:small.lib BATCH
+
+# Compile the source files
+.c.o:
+	$(CC) $*.c OBJNAME=$*.o IDIR=include:
+
+# Compile specific source file
+genin.o: genin.c
+	$(CC) genin.c OBJNAME=genin.o IDIR=include:
+
+# Clean target
+clean:
+	delete $(OBJS) $(PROGRAM) QUIET
+
+# Install target
+install:
+	copy $(PROGRAM) TO: C:
+
+# Help target
+help:
+	@echo "Available targets:"
+	@echo "  all      - Build the GenIn tool"
+	@echo "  clean    - Remove build artifacts"
+	@echo "  install  - Install to C: directory"
+	@echo "  help     - Show this help"
+
+.PHONY: all clean install help 

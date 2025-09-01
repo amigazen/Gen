@@ -1,0 +1,6 @@
+# Example project icon specification
+# This creates a project icon using default deficons
+
+TYPE=project
+TARGET=myproject.info
+DEFICON=src

@@ -1,0 +1,186 @@
+; Test script for GenIn tool - IMAGE version
+; This version uses IMAGE keywords instead of DEFICON keywords
+
+echo "GenIn Test Script - IMAGE Version"
+echo "================================="
+
+; Check if GenIn exists
+if exists genin
+    echo "GenIn executable found"
+else
+    echo "Error: GenIn executable not found. Please build it first with 'smake'"
+    quit
+endif
+
+echo "Testing GenIn with IMAGE configurations..."
+
+; Test 1: Help functionality
+echo ""
+echo "Test 1: Testing help functionality"
+genin HELP
+if not warn
+    echo "✓ Test 1 passed (help displayed)"
+else
+    echo "✗ Test 1 failed (help not displayed)"
+endif
+
+; Test 2: Project icon with default deficons
+echo ""
+echo "Test 2: Creating project icon with default deficons"
+echo "Using: examples/project_example.txt"
+genin SPECFILE=examples/project_example.txt
+if warn
+    echo "✓ Test 2 passed"
+else
+    echo "✗ Test 2 failed"
+endif
+
+; Test 3: Drawer icon with custom image
+echo ""
+echo "Test 3: Creating drawer icon with custom image"
+echo "Using: examples/drawer_example.txt"
+genin SPECFILE=examples/drawer_example.txt
+if warn
+    echo "✓ Test 3 passed"
+else
+    echo "✗ Test 3 failed"
+endif
+
+; Test 3b: Tool icon with IMAGE
+echo ""
+echo "Test 3b: Creating tool icon with IMAGE"
+echo "Using: examples/tool_example.txt"
+genin SPECFILE=examples/tool_example.txt
+if warn
+    echo "✓ Test 3b passed"
+else
+    echo "✗ Test 3b failed"
+endif
+
+; Test 4: Force overwrite
+echo ""
+echo "Test 4: Testing force overwrite"
+genin SPECFILE=examples/tool_example.txt FORCE
+if warn
+    echo "✓ Test 4 passed"
+else
+    echo "✗ Test 4 failed"
+endif
+
+; Test 5: Error handling - missing file
+echo ""
+echo "Test 5: Testing error handling with missing file"
+genin SPECFILE=nonexistent.txt
+if warn
+    echo "✗ Test 5 failed (should have failed)"
+else
+    echo "✓ Test 5 passed (correctly handled missing file)"
+endif
+
+; Test 6: Error handling - invalid arguments
+echo ""
+echo "Test 6: Testing error handling with invalid arguments"
+genin
+if warn
+    echo "✗ Test 6 failed (should have failed)"
+else
+    echo "✓ Test 6 passed (correctly handled invalid arguments)"
+endif
+
+; Test 7: Error handling - missing SPECFILE
+echo ""
+echo "Test 7: Testing error handling with missing SPECFILE"
+genin FORCE
+if warn
+    echo "✗ Test 7 failed (should have failed)"
+else
+    echo "✓ Test 7 passed (correctly handled missing SPECFILE)"
+endif
+
+; Test 8: Error handling - duplicate TOOLTYPE keys
+echo ""
+echo "Test 8: Testing error handling with duplicate TOOLTYPE keys"
+genin SPECFILE=examples/duplicate_tooltype.txt
+if warn
+    echo "✗ Test 8 failed (should have failed)"
+else
+    echo "✓ Test 8 passed (correctly handled duplicate keys)"
+endif
+
+; Test 9: Multiple icon definitions in single file
+echo ""
+echo "Test 9: Testing multiple icon definitions in single file"
+genin SPECFILE=examples/multi_icon_image_example.txt
+if warn
+    echo "✓ Test 9 passed (multiple icons created)"
+else
+    echo "✗ Test 9 failed (multiple icons not created)"
+endif
+
+; Test 10: Command line parameters (no spec file) with IMAGE
+echo ""
+echo "Test 10: Testing command line parameters without spec file"
+genin TYPE=tool TARGET=cmdline_test STACK=4096 TOOLTYPE=TEST=YES IMAGE=test_icon.png
+if warn
+    echo "✓ Test 10 passed (command line icon created)"
+else
+    echo "✗ Test 10 failed (command line icon not created)"
+endif
+
+; Test 11: Command line parameters with FORCE
+echo ""
+echo "Test 11: Testing command line parameters with FORCE"
+genin TYPE=project TARGET=cmdline_test FORCE
+if warn
+    echo "✓ Test 11 passed (command line icon with FORCE created)"
+else
+    echo "✗ Test 11 failed (command line icon with FORCE not created)"
+endif
+
+; Test 12: Testing various IMAGE file types
+echo ""
+echo "Test 12: Testing various IMAGE file types"
+echo "Creating icons with different image formats..."
+
+; Test with PNG
+genin TYPE=tool TARGET=test_png IMAGE=icon.png
+if warn
+    echo "✓ Test 12a passed (PNG image)"
+else
+    echo "✗ Test 12a failed (PNG image)"
+endif
+
+; Test with IFF
+genin TYPE=project TARGET=test_iff IMAGE=icon.iff
+if warn
+    echo "✓ Test 12b passed (IFF image)"
+else
+    echo "✗ Test 12b failed (IFF image)"
+endif
+
+; Test with JPEG
+genin TYPE=project TARGET=test_jpeg IMAGE=icon.jpg
+if warn
+    echo "✓ Test 12c passed (JPEG image)"
+else
+    echo "✗ Test 12c failed (JPEG image)"
+endif
+
+; Test with GIF
+genin TYPE=project TARGET=test_gif IMAGE=icon.gif
+if warn
+    echo "✓ Test 12d passed (GIF image)"
+else
+    echo "✗ Test 12d failed (GIF image)"
+endif
+
+; Test with BMP
+genin TYPE=project TARGET=test_bmp IMAGE=icon.bmp
+if warn
+    echo "✓ Test 12e passed (BMP image)"
+else
+    echo "✗ Test 12e failed (BMP image)"
+endif
+
+echo ""
+echo "Test completed. Check the generated .info files in the current directory." 

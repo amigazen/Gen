@@ -1,0 +1,175 @@
+; Test script for GenIn tool - DEFICON version
+; This version uses DEFICON keywords instead of IMAGE keywords
+
+echo "GenIn Test Script - DEFICON Version"
+echo "=================================="
+
+; Check if GenIn exists
+if exists genin
+    echo "GenIn executable found"
+else
+    echo "Error: GenIn executable not found. Please build it first with 'smake'"
+    quit
+endif
+
+echo "Testing GenIn with DEFICON configurations..."
+
+; Test 1: Help functionality
+echo ""
+echo "Test 1: Testing help functionality"
+genin HELP
+if not warn
+    echo "✓ Test 1 passed (help displayed)"
+else
+    echo "✗ Test 1 failed (help not displayed)"
+endif
+
+; Test 2: Project icon with default deficons
+echo ""
+echo "Test 2: Creating project icon with default deficons"
+echo "Using: examples/project_example.txt"
+genin SPECFILE=examples/project_example.txt
+if warn
+    echo "✓ Test 2 passed"
+else
+    echo "✗ Test 2 failed"
+endif
+
+; Test 3: Tool icon with DEFICON
+echo ""
+echo "Test 3: Creating tool icon with DEFICON"
+echo "Using: examples/deficon_example.txt"
+genin SPECFILE=examples/deficon_example.txt
+if warn
+    echo "✓ Test 3 passed"
+else
+    echo "✗ Test 3 failed"
+endif
+
+; Test 4: Force overwrite
+echo ""
+echo "Test 4: Testing force overwrite"
+genin SPECFILE=examples/deficon_example.txt FORCE
+if warn
+    echo "✓ Test 4 passed"
+else
+    echo "✗ Test 4 failed"
+endif
+
+; Test 5: Error handling - missing file
+echo ""
+echo "Test 5: Testing error handling with missing file"
+genin SPECFILE=nonexistent.txt
+if warn
+    echo "✗ Test 5 failed (should have failed)"
+else
+    echo "✓ Test 5 passed (correctly handled missing file)"
+endif
+
+; Test 6: Error handling - invalid arguments
+echo ""
+echo "Test 6: Testing error handling with invalid arguments"
+genin
+if warn
+    echo "✗ Test 6 failed (should have failed)"
+else
+    echo "✓ Test 6 passed (correctly handled invalid arguments)"
+endif
+
+; Test 7: Error handling - missing SPECFILE
+echo ""
+echo "Test 7: Testing error handling with missing SPECFILE"
+genin FORCE
+if warn
+    echo "✗ Test 7 failed (should have failed)"
+else
+    echo "✓ Test 7 passed (correctly handled missing SPECFILE)"
+endif
+
+; Test 8: Error handling - duplicate TOOLTYPE keys
+echo ""
+echo "Test 8: Testing error handling with duplicate TOOLTYPE keys"
+genin SPECFILE=examples/duplicate_tooltype.txt
+if warn
+    echo "✗ Test 8 failed (should have failed)"
+else
+    echo "✓ Test 8 passed (correctly handled duplicate keys)"
+endif
+
+; Test 9: Multiple icon definitions in single file
+echo ""
+echo "Test 9: Testing multiple icon definitions in single file"
+genin SPECFILE=examples/multi_icon_example.txt
+if warn
+    echo "✓ Test 9 passed (multiple icons created)"
+else
+    echo "✗ Test 9 failed (multiple icons not created)"
+endif
+
+; Test 10: Command line parameters (no spec file) with DEFICON
+echo ""
+echo "Test 10: Testing command line parameters without spec file"
+genin TYPE=tool TARGET=cmdline_test STACK=4096 TOOLTYPE=TEST=YES DEFICON=tool
+if warn
+    echo "✓ Test 10 passed (command line icon created)"
+else
+    echo "✗ Test 10 failed (command line icon not created)"
+endif
+
+; Test 11: Command line parameters with FORCE
+echo ""
+echo "Test 11: Testing command line parameters with FORCE"
+genin TYPE=project TARGET=cmdline_test FORCE
+if warn
+    echo "✓ Test 11 passed (command line icon with FORCE created)"
+else
+    echo "✗ Test 11 failed (command line icon with FORCE not created)"
+endif
+
+; Test 12: Testing various DEFICON types
+echo ""
+echo "Test 12: Testing various DEFICON types"
+echo "Creating icons with different deficons..."
+
+; Test with def_h (hardware)
+genin TYPE=tool TARGET=test_hardware DEFICON=h
+if warn
+    echo "✓ Test 12a passed (hardware deficon)"
+else
+    echo "✗ Test 12a failed (hardware deficon)"
+endif
+
+; Test with def_iff (image format)
+genin TYPE=project TARGET=test_iff DEFICON=iff
+if warn
+    echo "✓ Test 12b passed (IFF deficon)"
+else
+    echo "✗ Test 12b failed (IFF deficon)"
+endif
+
+; Test with def_pdf (document)
+genin TYPE=project TARGET=test_pdf DEFICON=pdf
+if warn
+    echo "✓ Test 12c passed (PDF deficon)"
+else
+    echo "✗ Test 12c failed (PDF deficon)"
+endif
+
+; Test with def_picture (image)
+genin TYPE=project TARGET=test_picture DEFICON=picture
+if warn
+    echo "✓ Test 12d passed (picture deficon)"
+else
+    echo "✗ Test 12d failed (picture deficon)"
+endif
+
+; Test with def_music (audio)
+genin TYPE=project TARGET=test_music DEFICON=music
+if warn
+    echo "✓ Test 12e passed (music deficon)"
+else
+    echo "✗ Test 12e failed (music deficon)"
+endif
+
+echo ""
+echo "Test completed. Check the generated .info files in the current directory." 

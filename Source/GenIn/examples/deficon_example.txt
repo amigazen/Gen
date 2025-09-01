@@ -1,0 +1,9 @@
+# Example using DEFICON parameter
+# This creates a tool icon using default deficons instead of custom image
+
+TYPE=tool
+TARGET=myapp_deficon.info
+STACK=8192
+TOOLTYPE=CX_POPUP=YES
+TOOLTYPE=CX_HOTKEY="ramiga d"
+DEFICON=src
