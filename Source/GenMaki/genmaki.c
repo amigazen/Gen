@@ -1549,50 +1549,712 @@ STRPTR convert_cflags(STRPTR flags, MakefileFormat from, MakefileFormat to)
     /* Convert compiler flags between different Amiga compilers */
     STRPTR result;
     STRPTR new_flags;
-    STRPTR inc_start;
-    STRPTR inc_end;
+    STRPTR option;
+    STRPTR mapped_option;
+    STRPTR current;
+    STRPTR start;
+    LONG flags_len;
+    LONG new_flags_len;
+    BOOL first_option;
     
     result = my_strdup(flags);
     if (!result) return flags;
     
-    if (from == FORMAT_LATTICE && to == FORMAT_SAS_C) {
-        /* Convert Lattice C flags to SAS/C flags */
-        /* -O -> OPTIMIZE */
-        /* -DNONAMES -> NOSTANDARDIO */
-        /* -DDEFBLOCKING=20 -> (remove, not applicable to SAS/C) */
+    /* If no conversion needed, return original */
+    if (from == to) {
+        return result;
+    }
+    
+    flags_len = strlen(flags);
+    new_flags = AllocVec(flags_len * 2, MEMF_CLEAR);
+    if (!new_flags) {
+        return result;
+    }
+    
+    new_flags_len = 0;
+    first_option = TRUE;
+    current = flags;
+    
+    /* Parse individual options separated by spaces */
+    while (*current) {
+        /* Skip leading spaces */
+        while (*current == ' ') current++;
+        if (!*current) break;
         
-        new_flags = AllocVec(strlen(flags) + 100, MEMF_CLEAR);
-        if (new_flags) {
-            strcpy((char *)new_flags, "OPTIMIZE NOSTANDARDIO");
-            
-            /* Add other flags that don't need conversion */
-            if (strstr(flags, "-I")) {
-                strcat((char *)new_flags, " INCLUDEDIR=");
-                /* Extract include path - simplified */
-                inc_start = strstr(flags, "-I");
-                if (inc_start) {
-                    inc_start += 2; /* Skip "-I" */
-                    while (*inc_start == ' ') inc_start++; /* Skip spaces */
-                    inc_end = inc_start;
-                    while (*inc_end && *inc_end != ' ') inc_end++;
-                    if (inc_end > inc_start) {
-                        strncat((char *)new_flags, inc_start, inc_end - inc_start);
+        /* Find end of current option */
+        start = current;
+        while (*current && *current != ' ') current++;
+        
+        /* Extract option */
+        if (current > start) {
+            option = AllocVec(current - start + 1, MEMF_CLEAR);
+            if (option) {
+                strncpy((char *)option, start, current - start);
+                option[current - start] = '\0';
+                
+                /* Map the option */
+                mapped_option = map_compiler_option(option, from, to);
+                
+                /* Add to result if not empty */
+                if (mapped_option && strlen(mapped_option) > 0) {
+                    if (!first_option) {
+                        strcat((char *)new_flags, " ");
+                        new_flags_len++;
                     }
+                    strcat((char *)new_flags, mapped_option);
+                    new_flags_len += strlen(mapped_option);
+                    first_option = FALSE;
+                }
+                
+                /* Clean up */
+                FreeVec(option);
+                if (mapped_option != option) {
+                    FreeVec(mapped_option);
                 }
             }
-            
-            FreeVec(result);
-            return new_flags;
         }
     }
     
-    return result;
+    FreeVec(result);
+    return new_flags;
 }
 
 STRPTR map_compiler_option(STRPTR option, MakefileFormat from, MakefileFormat to)
 {
-    /* TODO: Implement compiler option mapping */
-    return option;
+    /* Map compiler options between different Amiga compilers */
+    STRPTR result;
+    STRPTR new_option;
+    LONG option_len;
+    
+    result = my_strdup(option);
+    if (!result) return option;
+    
+    option_len = strlen(option);
+    
+    /* Lattice C to SAS/C mapping */
+    if (from == FORMAT_LATTICE && to == FORMAT_SAS_C) {
+        if (my_stricmp(option, "-O") == 0) {
+            new_option = my_strdup("OPTIMIZE");
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (my_stricmp(option, "-DNONAMES") == 0) {
+            new_option = my_strdup("NOSTANDARDIO");
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (strstr(option, "-DDEFBLOCKING=")) {
+            /* Remove this option as it's not applicable to SAS/C */
+            FreeVec(result);
+            return my_strdup("");
+        } else if (strstr(option, "-I")) {
+            /* Convert -Ipath to INCLUDEDIR=path: */
+            new_option = AllocVec(option_len + 20, MEMF_CLEAR);
+            if (new_option) {
+                strcpy((char *)new_option, "INCLUDEDIR=");
+                strcat((char *)new_option, option + 2); /* Skip "-I" */
+                strcat((char *)new_option, ":");
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (my_stricmp(option, "-v") == 0) {
+            new_option = my_strdup("VERBOSE");
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (my_stricmp(option, "-d2") == 0 || my_stricmp(option, "-y") == 0) {
+            new_option = my_strdup("DEBUG=L");
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (my_stricmp(option, "-ms") == 0) {
+            new_option = my_strdup("DATA=NEAR");
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (strstr(option, "-D")) {
+            /* Convert -DNAME=VALUE to DEF=NAME=VALUE or DEF=NAME */
+            new_option = AllocVec(option_len + 10, MEMF_CLEAR);
+            if (new_option) {
+                strcpy((char *)new_option, "DEF=");
+                strcat((char *)new_option, option + 2); /* Skip "-D" */
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (my_stricmp(option, "-w") == 0) {
+            new_option = my_strdup("IGN=A");
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (my_stricmp(option, "-g") == 0) {
+            new_option = my_strdup("DEBUG=FF");
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (my_stricmp(option, "-c") == 0) {
+            new_option = my_strdup("OBJNAME");
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (my_stricmp(option, "-E") == 0) {
+            new_option = my_strdup("PPONLY");
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (my_stricmp(option, "-a") == 0) {
+            new_option = my_strdup("DISASM");
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        }
+    }
+    
+    /* Lattice C to DICE mapping */
+    if (from == FORMAT_LATTICE && to == FORMAT_DICE) {
+        if (my_stricmp(option, "-O") == 0) {
+            new_option = my_strdup("-O");
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (my_stricmp(option, "-DNONAMES") == 0) {
+            /* Remove this option as it's not applicable to DICE */
+            FreeVec(result);
+            return my_strdup("");
+        } else if (strstr(option, "-DDEFBLOCKING=")) {
+            /* Remove this option as it's not applicable to DICE */
+            FreeVec(result);
+            return my_strdup("");
+        } else if (strstr(option, "-I")) {
+            /* Keep -I format for DICE */
+            return result;
+        } else if (my_stricmp(option, "-v") == 0) {
+            new_option = my_strdup("-v");
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (my_stricmp(option, "-d2") == 0 || my_stricmp(option, "-y") == 0) {
+            new_option = my_strdup("-d1");
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (my_stricmp(option, "-ms") == 0) {
+            new_option = my_strdup("-ms");
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (strstr(option, "-D")) {
+            /* Keep -D format for DICE */
+            return result;
+        } else if (my_stricmp(option, "-w") == 0) {
+            /* DICE doesn't support -w, remove it */
+            FreeVec(result);
+            return my_strdup("");
+        } else if (my_stricmp(option, "-g") == 0) {
+            new_option = my_strdup("-s -d1");
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (my_stricmp(option, "-c") == 0) {
+            new_option = my_strdup("-c");
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (my_stricmp(option, "-E") == 0) {
+            /* DICE uses dcpp for preprocessing */
+            new_option = my_strdup("-E");
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (my_stricmp(option, "-a") == 0) {
+            new_option = my_strdup("-a");
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        }
+    }
+    
+    /* Lattice C to GNU Make mapping */
+    if (from == FORMAT_LATTICE && to == FORMAT_GNU_MAKE) {
+        if (my_stricmp(option, "-O") == 0) {
+            new_option = my_strdup("-O2");
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (my_stricmp(option, "-DNONAMES") == 0) {
+            /* Remove this option as it's not applicable to GCC */
+            FreeVec(result);
+            return my_strdup("");
+        } else if (strstr(option, "-DDEFBLOCKING=")) {
+            /* Remove this option as it's not applicable to GCC */
+            FreeVec(result);
+            return my_strdup("");
+        } else if (strstr(option, "-I")) {
+            /* Keep -I format for GCC */
+            return result;
+        } else if (my_stricmp(option, "-v") == 0) {
+            new_option = my_strdup("-v");
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (my_stricmp(option, "-d2") == 0 || my_stricmp(option, "-y") == 0) {
+            new_option = my_strdup("-g");
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (my_stricmp(option, "-ms") == 0) {
+            new_option = my_strdup("-m68000");
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (strstr(option, "-D")) {
+            /* Keep -D format for GCC */
+            return result;
+        } else if (my_stricmp(option, "-w") == 0) {
+            new_option = my_strdup("-w");
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (my_stricmp(option, "-g") == 0) {
+            new_option = my_strdup("-g");
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (my_stricmp(option, "-c") == 0) {
+            new_option = my_strdup("-c");
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (my_stricmp(option, "-E") == 0) {
+            new_option = my_strdup("-E");
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (my_stricmp(option, "-a") == 0) {
+            /* GCC doesn't have -a, use -S for assembly output */
+            new_option = my_strdup("-S");
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        }
+    }
+    
+    /* SAS/C to other formats */
+    if (from == FORMAT_SAS_C) {
+        if (my_stricmp(option, "OPTIMIZE") == 0) {
+            if (to == FORMAT_GNU_MAKE) {
+                new_option = my_strdup("-O2");
+            } else if (to == FORMAT_DICE) {
+                new_option = my_strdup("-O");
+            } else if (to == FORMAT_LATTICE) {
+                new_option = my_strdup("-O");
+            } else {
+                return result;
+            }
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (my_stricmp(option, "NOSTANDARDIO") == 0) {
+            /* Remove this option as it's SAS/C specific */
+            FreeVec(result);
+            return my_strdup("");
+        } else if (strstr(option, "INCLUDEDIR=")) {
+            /* Convert INCLUDEDIR=path: to -Ipath */
+            new_option = AllocVec(option_len + 5, MEMF_CLEAR);
+            if (new_option) {
+                strcpy((char *)new_option, "-I");
+                strcat((char *)new_option, option + 11); /* Skip "INCLUDEDIR=" */
+                /* Remove trailing colon if present */
+                if (new_option[strlen((char *)new_option) - 1] == ':') {
+                    new_option[strlen((char *)new_option) - 1] = '\0';
+                }
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (my_stricmp(option, "DEBUG=L") == 0) {
+            if (to == FORMAT_GNU_MAKE) {
+                new_option = my_strdup("-g");
+            } else if (to == FORMAT_DICE) {
+                new_option = my_strdup("-d1");
+            } else if (to == FORMAT_LATTICE) {
+                new_option = my_strdup("-d2");
+            } else {
+                return result;
+            }
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (my_stricmp(option, "DATA=NEAR") == 0) {
+            if (to == FORMAT_GNU_MAKE) {
+                new_option = my_strdup("-m68000");
+            } else if (to == FORMAT_DICE) {
+                new_option = my_strdup("-ms");
+            } else if (to == FORMAT_LATTICE) {
+                new_option = my_strdup("-ms");
+            } else {
+                return result;
+            }
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (my_stricmp(option, "VERBOSE") == 0) {
+            if (to == FORMAT_GNU_MAKE) {
+                new_option = my_strdup("-v");
+            } else if (to == FORMAT_DICE) {
+                new_option = my_strdup("-v");
+            } else if (to == FORMAT_LATTICE) {
+                new_option = my_strdup("-v");
+            } else {
+                return result;
+            }
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (my_stricmp(option, "IGN=A") == 0) {
+            if (to == FORMAT_GNU_MAKE) {
+                new_option = my_strdup("-w");
+            } else if (to == FORMAT_DICE) {
+                /* DICE doesn't support -w, remove it */
+                FreeVec(result);
+                return my_strdup("");
+            } else if (to == FORMAT_LATTICE) {
+                new_option = my_strdup("-w");
+            } else {
+                return result;
+            }
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (strstr(option, "DEF=")) {
+            /* Convert DEF=NAME=VALUE to -DNAME=VALUE or DEF=NAME to -DNAME */
+            new_option = AllocVec(option_len + 5, MEMF_CLEAR);
+            if (new_option) {
+                strcpy((char *)new_option, "-D");
+                strcat((char *)new_option, option + 4); /* Skip "DEF=" */
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (my_stricmp(option, "OBJNAME") == 0) {
+            if (to == FORMAT_GNU_MAKE) {
+                new_option = my_strdup("-c");
+            } else if (to == FORMAT_DICE) {
+                new_option = my_strdup("-c");
+            } else if (to == FORMAT_LATTICE) {
+                new_option = my_strdup("-c");
+            } else {
+                return result;
+            }
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (my_stricmp(option, "PPONLY") == 0) {
+            if (to == FORMAT_GNU_MAKE) {
+                new_option = my_strdup("-E");
+            } else if (to == FORMAT_DICE) {
+                new_option = my_strdup("-E");
+            } else if (to == FORMAT_LATTICE) {
+                new_option = my_strdup("-E");
+            } else {
+                return result;
+            }
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (my_stricmp(option, "DISASM") == 0) {
+            if (to == FORMAT_GNU_MAKE) {
+                new_option = my_strdup("-S");
+            } else if (to == FORMAT_DICE) {
+                new_option = my_strdup("-a");
+            } else if (to == FORMAT_LATTICE) {
+                new_option = my_strdup("-a");
+            } else {
+                return result;
+            }
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        }
+    }
+    
+    /* DICE to other formats */
+    if (from == FORMAT_DICE) {
+        if (my_stricmp(option, "-O") == 0) {
+            if (to == FORMAT_GNU_MAKE) {
+                new_option = my_strdup("-O2");
+            } else if (to == FORMAT_SAS_C) {
+                new_option = my_strdup("OPTIMIZE");
+            } else if (to == FORMAT_LATTICE) {
+                new_option = my_strdup("-O");
+            } else {
+                return result;
+            }
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (my_stricmp(option, "-d1") == 0) {
+            if (to == FORMAT_GNU_MAKE) {
+                new_option = my_strdup("-g");
+            } else if (to == FORMAT_SAS_C) {
+                new_option = my_strdup("DEBUG=L");
+            } else if (to == FORMAT_LATTICE) {
+                new_option = my_strdup("-d2");
+            } else {
+                return result;
+            }
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (my_stricmp(option, "-ms") == 0) {
+            if (to == FORMAT_GNU_MAKE) {
+                new_option = my_strdup("-m68000");
+            } else if (to == FORMAT_SAS_C) {
+                new_option = my_strdup("DATA=NEAR");
+            } else if (to == FORMAT_LATTICE) {
+                new_option = my_strdup("-ms");
+            } else {
+                return result;
+            }
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (strstr(option, "-D")) {
+            /* Keep -D format for other compilers */
+            return result;
+        } else if (my_stricmp(option, "-v") == 0) {
+            if (to == FORMAT_GNU_MAKE) {
+                new_option = my_strdup("-v");
+            } else if (to == FORMAT_SAS_C) {
+                new_option = my_strdup("VERBOSE");
+            } else if (to == FORMAT_LATTICE) {
+                new_option = my_strdup("-v");
+            } else {
+                return result;
+            }
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (my_stricmp(option, "-c") == 0) {
+            if (to == FORMAT_GNU_MAKE) {
+                new_option = my_strdup("-c");
+            } else if (to == FORMAT_SAS_C) {
+                new_option = my_strdup("OBJNAME");
+            } else if (to == FORMAT_LATTICE) {
+                new_option = my_strdup("-c");
+            } else {
+                return result;
+            }
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (my_stricmp(option, "-E") == 0) {
+            if (to == FORMAT_GNU_MAKE) {
+                new_option = my_strdup("-E");
+            } else if (to == FORMAT_SAS_C) {
+                new_option = my_strdup("PPONLY");
+            } else if (to == FORMAT_LATTICE) {
+                new_option = my_strdup("-E");
+            } else {
+                return result;
+            }
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (my_stricmp(option, "-a") == 0) {
+            if (to == FORMAT_GNU_MAKE) {
+                new_option = my_strdup("-S");
+            } else if (to == FORMAT_SAS_C) {
+                new_option = my_strdup("DISASM");
+            } else if (to == FORMAT_LATTICE) {
+                new_option = my_strdup("-a");
+            } else {
+                return result;
+            }
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (my_stricmp(option, "-s") == 0) {
+            /* DICE -s is for debug symbols, map to appropriate debug options */
+            if (to == FORMAT_GNU_MAKE) {
+                new_option = my_strdup("-g");
+            } else if (to == FORMAT_SAS_C) {
+                new_option = my_strdup("DEBUG=FF");
+            } else if (to == FORMAT_LATTICE) {
+                new_option = my_strdup("-g");
+            } else {
+                return result;
+            }
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        }
+    }
+    
+    /* GNU Make to other formats */
+    if (from == FORMAT_GNU_MAKE) {
+        if (my_stricmp(option, "-O2") == 0) {
+            if (to == FORMAT_SAS_C) {
+                new_option = my_strdup("OPTIMIZE");
+            } else if (to == FORMAT_DICE) {
+                new_option = my_strdup("-O");
+            } else if (to == FORMAT_LATTICE) {
+                new_option = my_strdup("-O");
+            } else {
+                return result;
+            }
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (my_stricmp(option, "-g") == 0) {
+            if (to == FORMAT_SAS_C) {
+                new_option = my_strdup("DEBUG=L");
+            } else if (to == FORMAT_DICE) {
+                new_option = my_strdup("-d1");
+            } else if (to == FORMAT_LATTICE) {
+                new_option = my_strdup("-d2");
+            } else {
+                return result;
+            }
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (my_stricmp(option, "-m68000") == 0) {
+            if (to == FORMAT_SAS_C) {
+                new_option = my_strdup("DATA=NEAR");
+            } else if (to == FORMAT_DICE) {
+                new_option = my_strdup("-ms");
+            } else if (to == FORMAT_LATTICE) {
+                new_option = my_strdup("-ms");
+            } else {
+                return result;
+            }
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (strstr(option, "-D")) {
+            /* Keep -D format for other compilers */
+            return result;
+        } else if (my_stricmp(option, "-v") == 0) {
+            if (to == FORMAT_SAS_C) {
+                new_option = my_strdup("VERBOSE");
+            } else if (to == FORMAT_DICE) {
+                new_option = my_strdup("-v");
+            } else if (to == FORMAT_LATTICE) {
+                new_option = my_strdup("-v");
+            } else {
+                return result;
+            }
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (my_stricmp(option, "-w") == 0) {
+            if (to == FORMAT_SAS_C) {
+                new_option = my_strdup("IGN=A");
+            } else if (to == FORMAT_DICE) {
+                /* DICE doesn't support -w, remove it */
+                FreeVec(result);
+                return my_strdup("");
+            } else if (to == FORMAT_LATTICE) {
+                new_option = my_strdup("-w");
+            } else {
+                return result;
+            }
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (my_stricmp(option, "-c") == 0) {
+            if (to == FORMAT_SAS_C) {
+                new_option = my_strdup("OBJNAME");
+            } else if (to == FORMAT_DICE) {
+                new_option = my_strdup("-c");
+            } else if (to == FORMAT_LATTICE) {
+                new_option = my_strdup("-c");
+            } else {
+                return result;
+            }
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (my_stricmp(option, "-E") == 0) {
+            if (to == FORMAT_SAS_C) {
+                new_option = my_strdup("PPONLY");
+            } else if (to == FORMAT_DICE) {
+                new_option = my_strdup("-E");
+            } else if (to == FORMAT_LATTICE) {
+                new_option = my_strdup("-E");
+            } else {
+                return result;
+            }
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        } else if (my_stricmp(option, "-S") == 0) {
+            if (to == FORMAT_SAS_C) {
+                new_option = my_strdup("DISASM");
+            } else if (to == FORMAT_DICE) {
+                new_option = my_strdup("-a");
+            } else if (to == FORMAT_LATTICE) {
+                new_option = my_strdup("-a");
+            } else {
+                return result;
+            }
+            if (new_option) {
+                FreeVec(result);
+                return new_option;
+            }
+        }
+    }
+    
+    /* If no mapping found, return original option */
+    return result;
 }
 
 STRPTR map_command(STRPTR command, MakefileFormat from, MakefileFormat to)
