@@ -1,0 +1,41 @@
+# GenMaki - Makefile Format Converter
+# SAS/C SMakefile for building GenMaki
+
+# Compiler and linker settings
+CC = sc
+LINKER = slink
+
+# Compiler options
+CFLAGS = STRIPDEBUG NODEBUG LIB sc:lib/sc.lib lib:small.lib BATCH
+SCOPTIONS = DATA=NEAR CODE=NEAR PARAMETERS=REGISTERS NOSTACKCHECK COMMENTNEST STRUCTUREEQUIVALENCE OPTIMIZE NOICONS MAP NOVERSION UTILITYLIBRARY INCLUDEDIR=include:
+
+# Source files
+SOURCES = genmaki.c
+
+# Object files
+OBJECTS = genmaki.o
+
+# Target executable
+TARGET = GenMaki
+
+# Default target
+all: $(TARGET)
+
+# Compilation rule
+.c.o:
+	$(CC) $*.c OBJNAME=$*.o $(CFLAGS)
+
+# Linking rule
+$(TARGET): $(OBJECTS)
+	$(LINKER) FROM sc:lib/c.o $(OBJECTS) TO $(TARGET) $(CFLAGS)
+
+# Clean rule
+clean:
+	delete $(OBJECTS) $(TARGET) QUIET
+
+# Install rule
+install: $(TARGET)
+	copy $(TARGET) TO c:$(TARGET)
+
+# Dependencies
+genmaki.o: genmaki.c
