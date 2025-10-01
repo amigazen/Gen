@@ -32,8 +32,6 @@
 #include <proto/dos.h>
 #include <proto/utility.h>
 
-/* Error codes are already defined in dos/dos.h */
-
 /* Version and stack information */
 static const char *verstag = "$VER: GenDo 1.0 (01/10/25)";
 static const char *stack_cookie = "$STACK: 8192";
