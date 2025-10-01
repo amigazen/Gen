@@ -88,11 +88,13 @@ typedef struct {
     BOOL convert_comments;
     BOOL no_form_feed;
     BOOL no_toc;
+    BOOL preserve_order;
 } Config;
 
 /* Function prototypes */
 LONG parse_command_line(Config *config, LONG argc, STRPTR *argv);
 BOOL process_source_files(Config *config);
+void sort_autodocs(Config *config);
 BOOL parse_autodoc_from_file(SourceFile *file, Config *config);
 BOOL is_autodoc_start(const char *line);
 BOOL is_autodoc_end(const char *line);
@@ -107,6 +109,8 @@ BOOL generate_doc_output(Config *config);
 BOOL generate_guide_output(Config *config);
 void cleanup_config(Config *config);
 void print_usage(void);
+LONG expand_wildcards(Config *config, STRPTR *file_array, LONG file_count);
+BOOL match_pattern(const char *pattern, const char *filename);
 int main(int argc, char *argv[]);
 
 /* Helper function for string duplication using Amiga memory allocation */
@@ -217,15 +221,224 @@ STRPTR is_section_header(const char *line)
     return NULL;
 }
 
+/* Match a filename against a wildcard pattern using Amiga DOS APIs */
+BOOL match_pattern(const char *pattern, const char *filename)
+{
+    STRPTR tokenized_pattern;
+    LONG pattern_len;
+    LONG result;
+    
+    /* Allocate buffer for tokenized pattern (2x source length + 2 bytes as per docs) */
+    pattern_len = strlen(pattern);
+    tokenized_pattern = AllocVec(pattern_len * 2 + 2, MEMF_CLEAR);
+    if (!tokenized_pattern) {
+        return FALSE;
+    }
+    
+    /* Parse the pattern using Amiga DOS ParsePattern */
+    result = ParsePattern((STRPTR)pattern, tokenized_pattern, pattern_len * 2 + 2);
+    
+    if (result == -1) {
+        /* Error in pattern parsing */
+        FreeVec(tokenized_pattern);
+        return FALSE;
+    }
+    
+    /* Use MatchPattern to check if filename matches the tokenized pattern */
+    result = MatchPattern(tokenized_pattern, (STRPTR)filename);
+    
+    FreeVec(tokenized_pattern);
+    if (result == 1) {
+        return TRUE;
+    } else {
+        return FALSE;
+    }
+}
+
+/* Expand wildcards in file patterns and populate config->source_files */
+LONG expand_wildcards(Config *config, STRPTR *file_array, LONG file_count)
+{
+    struct AnchorPath *ap;
+    STRPTR *expanded_files;
+    LONG expanded_count = 0;
+    LONG max_files = file_count * 1000; /* Allow for wildcard expansion - very generous limit */
+    LONG i;
+    LONG err;
+    LONG j;
+    
+    /* Allocate space for expanded file list */
+    expanded_files = (STRPTR*)AllocVec(max_files * sizeof(STRPTR), MEMF_CLEAR);
+    if (!expanded_files) {
+        Printf("GenDo: Out of memory for file expansion\n");
+        return 0;
+    }
+    
+    /* Allocate AnchorPath for directory scanning */
+    ap = (struct AnchorPath*)AllocVec(sizeof(struct AnchorPath) + 1024, MEMF_CLEAR);
+    if (!ap) {
+        Printf("GenDo: Out of memory for directory scanning\n");
+        FreeVec(expanded_files);
+        return 0;
+    }
+    
+    ap->ap_Strlen = 1024;
+    ap->ap_BreakBits = SIGBREAKF_CTRL_C;
+    
+    /* Process each file pattern */
+    for (i = 0; i < file_count; i++) {
+        if (!file_array[i]) continue;
+        
+        if (config->verbose) {
+            Printf("GenDo: Expanding pattern '%s'\n", file_array[i]);
+        }
+        
+        /* Use MatchFirst to scan for files matching the pattern */
+        err = MatchFirst(file_array[i], ap);
+        if (err == 0) {
+            do {
+                if (ap->ap_Info.fib_DirEntryType < 0) { /* Regular file */
+                    /* Build full path from ap->ap_Buf which contains the full path */
+                    STRPTR full_path = AllocVec(strlen(ap->ap_Buf) + 1, MEMF_CLEAR);
+                    if (full_path) {
+                        strcpy(full_path, ap->ap_Buf);
+                        
+                        if (expanded_count >= max_files) {
+                            /* Reallocate with more space */
+                            LONG new_max = max_files * 2;
+                            STRPTR *new_files = (STRPTR*)AllocVec(new_max * sizeof(STRPTR), MEMF_CLEAR);
+                            if (new_files) {
+                                /* Copy existing files */
+                                for (j = 0; j < expanded_count; j++) {
+                                    new_files[j] = expanded_files[j];
+                                }
+                                FreeVec(expanded_files);
+                                expanded_files = new_files;
+                                max_files = new_max;
+                                
+                                if (config->verbose) {
+                                    Printf("GenDo: Expanded file list to %ld entries\n", max_files);
+                                }
+                            } else {
+                                /* Out of memory, free the file and continue */
+                                FreeVec(full_path);
+                                continue;
+                            }
+                        }
+                        
+                        expanded_files[expanded_count] = full_path;
+                        expanded_count++;
+                        
+                        if (config->verbose) {
+                            Printf("GenDo: Found file '%s'\n", full_path);
+                        }
+                    }
+                }
+            } while ((err = MatchNext(ap)) == 0);
+            
+            if (err == ERROR_NO_MORE_ENTRIES) {
+                err = 0; /* Normal completion */
+            }
+        } else if (err == ERROR_OBJECT_NOT_FOUND) {
+            /* Pattern doesn't match anything, try as literal filename */
+            BPTR fh = Open(file_array[i], MODE_OLDFILE);
+            if (fh) {
+                Close(fh);
+                /* File exists, add it directly */
+                if (expanded_count >= max_files) {
+                    /* Reallocate with more space */
+                    LONG new_max = max_files * 2;
+                    STRPTR *new_files = (STRPTR*)AllocVec(new_max * sizeof(STRPTR), MEMF_CLEAR);
+                    if (new_files) {
+                        /* Copy existing files */
+                        for (j = 0; j < expanded_count; j++) {
+                            new_files[j] = expanded_files[j];
+                        }
+                        FreeVec(expanded_files);
+                        expanded_files = new_files;
+                        max_files = new_max;
+                        
+                        if (config->verbose) {
+                            Printf("GenDo: Expanded file list to %ld entries\n", max_files);
+                        }
+                    } else {
+                        /* Out of memory, skip this file */
+                        continue;
+                    }
+                }
+                
+                expanded_files[expanded_count] = strdup_amiga(file_array[i]);
+                expanded_count++;
+                
+                if (config->verbose) {
+                    Printf("GenDo: Found file '%s'\n", file_array[i]);
+                }
+            }
+        }
+    }
+    
+    /* Clean up */
+    FreeVec(ap);
+    
+    if (expanded_count == 0) {
+        Printf("GenDo: No files found matching the specified patterns\n");
+        FreeVec(expanded_files);
+        return 0;
+    }
+    
+    /* Allocate and populate source_files */
+    config->file_count = expanded_count;
+    config->source_files = (SourceFile*)AllocVec(expanded_count * sizeof(SourceFile), MEMF_CLEAR);
+    if (config->source_files) {
+        for (i = 0; i < expanded_count; i++) {
+            config->source_files[i].filename = expanded_files[i];
+            config->source_files[i].file_handle = 0;
+            config->source_files[i].line_count = 0;
+        }
+    }
+    
+    FreeVec(expanded_files);
+    return expanded_count;
+}
+
+/* Sort autodocs alphabetically by function name */
+void sort_autodocs(Config *config)
+{
+    LONG i, j;
+    Autodoc *temp;
+    
+    if (!config->autodocs || config->autodoc_count <= 1) {
+        return; /* Nothing to sort */
+    }
+    
+    /* Simple bubble sort - stable and easy to understand */
+    for (i = 0; i < config->autodoc_count - 1; i++) {
+        for (j = 0; j < config->autodoc_count - 1 - i; j++) {
+            if (strcmp(config->autodocs[j].function_name, config->autodocs[j + 1].function_name) > 0) {
+                /* Swap the autodocs */
+                temp = (Autodoc*)AllocVec(sizeof(Autodoc), MEMF_CLEAR);
+                if (temp) {
+                    *temp = config->autodocs[j];
+                    config->autodocs[j] = config->autodocs[j + 1];
+                    config->autodocs[j + 1] = *temp;
+                    FreeVec(temp);
+                }
+            }
+        }
+    }
+    
+    if (config->verbose) {
+        Printf("GenDo: Sorted %ld autodoc entries alphabetically\n", config->autodoc_count);
+    }
+}
+
 /* Parse command line arguments using ReadArgs */
 LONG parse_command_line(Config *config, LONG argc, STRPTR *argv)
 {
     struct RDArgs *rdargs;
-    LONG i;
     
     /* Template for ReadArgs */
-    static UBYTE template[] = "FILES/M/A,TO/K,AMIGAGUIDE/S,VERBOSE/S,LINELENGTH/N,WORDWRAP/S,CONVERTCOMMENTS/S,NOFORMFEED/S,NOTOC/S";
-    LONG args[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0}; /* files, to, amigaguide, verbose, linelength, wordwrap, convertcomments, noformfeed, notoc */
+    static UBYTE template[] = "FILES/M/A,TO/K,AMIGAGUIDE/S,VERBOSE/S,LINELENGTH/N,WORDWRAP/S,CONVERTCOMMENTS/S,NOFORMFEED/S,NOTOC/S,PRESERVEORDER/S";
+    LONG args[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}; /* files, to, amigaguide, verbose, linelength, wordwrap, convertcomments, noformfeed, notoc, preserveorder */
     
     /* Initialize config */
     config->output_doc = NULL;
@@ -260,16 +473,11 @@ LONG parse_command_line(Config *config, LONG argc, STRPTR *argv)
         }
         
         if (file_count > 0) {
-            config->file_count = file_count;
-            config->source_files = (SourceFile*)AllocVec(file_count * sizeof(SourceFile), MEMF_CLEAR);
-            if (config->source_files) {
-                for (i = 0; i < file_count; i++) {
-                    if (file_array[i]) {
-                        config->source_files[i].filename = strdup_amiga(file_array[i]);
-                        config->source_files[i].file_handle = 0;
-                        config->source_files[i].line_count = 0;
-                    }
-                }
+            /* Expand wildcards and populate source_files */
+            LONG expanded_count = expand_wildcards(config, file_array, file_count);
+            if (expanded_count == 0) {
+                FreeArgs(rdargs);
+                return RETURN_FAIL;
             }
         }
     }
@@ -295,6 +503,7 @@ LONG parse_command_line(Config *config, LONG argc, STRPTR *argv)
     if (args[6]) config->convert_comments = TRUE;
     if (args[7]) config->no_form_feed = TRUE;
     if (args[8]) config->no_toc = TRUE;
+    if (args[9]) config->preserve_order = TRUE;
     
     /* Validate required arguments - output_doc already validated above */
     
@@ -423,6 +632,29 @@ BOOL parse_autodoc_from_file(SourceFile *file, Config *config)
                 if (slash) {
                     /* Make a copy of the function name part */
                     current_autodoc.function_name = strdup_amiga(slash + 1);
+                } else {
+                    /* No slash found, use the whole module name as function name */
+                    current_autodoc.function_name = strdup_amiga(module_func);
+                }
+                
+                /* Debug output */
+                if (config->verbose) {
+                    char *module_str;
+                    char *function_str;
+                    
+                    if (current_autodoc.module_name) {
+                        module_str = current_autodoc.module_name;
+                    } else {
+                        module_str = "NULL";
+                    }
+                    
+                    if (current_autodoc.function_name) {
+                        function_str = current_autodoc.function_name;
+                    } else {
+                        function_str = "NULL";
+                    }
+                    
+                    Printf("GenDo: Module: %s, Function: %s\n", module_str, function_str);
                 }
             }
             
@@ -671,15 +903,15 @@ STRPTR clean_content(const char *content)
             /* Handle special characters that might be UTF-8 encoded */
             if ((unsigned char)*src == 0xCF && (unsigned char)*(src+1) == 0x80) {
                 /* UTF-8 ? (0xCF 0x80) -> Latin-1 ? (0xF0) */
-                *dst++ = 0xF0;
+                *dst++ = (unsigned char)0xF0;
                 src++; /* Skip the second byte */
             } else if ((unsigned char)*src == 0xC3 && (unsigned char)*(src+1) == 0x80) {
                 /* UTF-8 À (0xC3 0x80) -> Latin-1 À (0xC0) */
-                *dst++ = 0xC0;
+                *dst++ = (unsigned char)0xC0;
                 src++; /* Skip the second byte */
             } else if ((unsigned char)*src == 0xC3 && (unsigned char)*(src+1) == 0x9F) {
                 /* UTF-8 ß (0xC3 0x9F) -> Latin-1 ß (0xDF) */
-                *dst++ = 0xDF;
+                *dst++ = (unsigned char)0xDF;
                 src++; /* Skip the second byte */
             } else {
                 /* Preserve all other characters including special Latin-1 characters */
@@ -966,64 +1198,77 @@ BOOL generate_guide_output(Config *config)
     }
     
     /* Write AmigaGuide header */
-    FPrintf(file_handle, "@DATABASE \"%s\"\n", config->output_guide);
-    FPrintf(file_handle, "@NODE \"main\" \"Amiga Autodoc Documentation\"\n");
-    FPrintf(file_handle, "@NEXT \"toc\"\n");
-    FPrintf(file_handle, "@PREV \"main\"\n");
-    FPrintf(file_handle, "@HELP \"main\"\n");
+    FPrintf(file_handle, "@database %s\n", config->output_guide);
+    FPrintf(file_handle, "\n");
+    FPrintf(file_handle, "@Node Main \"Amiga Autodoc Documentation\"\n");
+    FPrintf(file_handle, "@Next \"toc\"\n");
+    FPrintf(file_handle, "@Prev \"main\"\n");
     FPrintf(file_handle, "\n");
     FPrintf(file_handle, "Amiga Autodoc Documentation\n");
     FPrintf(file_handle, "Generated by GenDo v1.0\n");
     FPrintf(file_handle, "\n");
+    FPrintf(file_handle, "$VER: %s 1.0 (Generated by GenDo)\n", config->output_guide);
+    FPrintf(file_handle, "\n");
     FPrintf(file_handle, "This documentation contains autodocs extracted from source code.\n");
     FPrintf(file_handle, "\n");
     FPrintf(file_handle, "@{b}Table of Contents@{ub}\n");
-    FPrintf(file_handle, "@{link \"toc\"}View Table of Contents@{link}\n");
+    FPrintf(file_handle, "@{\"toc\" link \"View Table of Contents\"}\n");
     FPrintf(file_handle, "\n");
     FPrintf(file_handle, "@{b}Functions@{ub}\n");
     
-    /* Write function links */
+    /* Write function links with proper formatting */
     for (i = 0; i < config->autodoc_count; i++) {
-        if (config->autodocs[i].name) {
-            FPrintf(file_handle, "@{link \"func_%ld\"}%s@{link}\n", i, config->autodocs[i].name);
+        if (config->autodocs[i].function_name) {
+            FPrintf(file_handle, "@{\"%s\" link \"%s\"}\n", config->autodocs[i].function_name, config->autodocs[i].function_name);
         }
     }
     
     FPrintf(file_handle, "\n");
-    FPrintf(file_handle, "@ENDNODE\n");
+    FPrintf(file_handle, "@EndNode\n");
     
     /* Write table of contents node */
-    FPrintf(file_handle, "@NODE \"toc\" \"Table of Contents\"\n");
-    FPrintf(file_handle, "@NEXT \"main\"\n");
-    FPrintf(file_handle, "@PREV \"main\"\n");
-    FPrintf(file_handle, "@HELP \"main\"\n");
+    FPrintf(file_handle, "@Node toc \"Table of Contents\"\n");
+    FPrintf(file_handle, "@Next \"main\"\n");
+    FPrintf(file_handle, "@Prev \"main\"\n");
     FPrintf(file_handle, "\n");
     FPrintf(file_handle, "@{b}Table of Contents@{ub}\n");
     FPrintf(file_handle, "\n");
     
     for (i = 0; i < config->autodoc_count; i++) {
-        if (config->autodocs[i].name) {
-            FPrintf(file_handle, "@{link \"func_%ld\"}%s@{link}\n", i, config->autodocs[i].name);
+        if (config->autodocs[i].function_name) {
+            FPrintf(file_handle, "@{\"%s\" link \"%s\"}\n", config->autodocs[i].function_name, config->autodocs[i].function_name);
         }
     }
     
     FPrintf(file_handle, "\n");
-    FPrintf(file_handle, "@{link \"main\"}Back to Main@{link}\n");
+    FPrintf(file_handle, "@{\"main\" link \"Back to Main\"}\n");
     FPrintf(file_handle, "\n");
-    FPrintf(file_handle, "@ENDNODE\n");
+    FPrintf(file_handle, "@EndNode\n");
     
     /* Write function nodes */
     for (i = 0; i < config->autodoc_count; i++) {
         doc = &config->autodocs[i];
         
-        if (doc->name) {
-            FPrintf(file_handle, "@NODE \"func_%ld\" \"%s\"\n", i, doc->name);
-            FPrintf(file_handle, "@NEXT \"func_%ld\"\n", (i + 1) % config->autodoc_count);
-            FPrintf(file_handle, "@PREV \"func_%ld\"\n", (i - 1 + config->autodoc_count) % config->autodoc_count);
-            FPrintf(file_handle, "@HELP \"main\"\n");
+        if (doc->function_name) {
+            FPrintf(file_handle, "@Node %s \"%s\"\n", doc->function_name, doc->function_name);
+            
+            /* Set next link - last function links back to main */
+            if (i == config->autodoc_count - 1) {
+                FPrintf(file_handle, "@Next \"main\"\n");
+            } else {
+                FPrintf(file_handle, "@Next \"%s\"\n", config->autodocs[i + 1].function_name);
+            }
+            
+            /* Set previous link - first function links back to main */
+            if (i == 0) {
+                FPrintf(file_handle, "@Prev \"main\"\n");
+            } else {
+                FPrintf(file_handle, "@Prev \"%s\"\n", config->autodocs[i - 1].function_name);
+            }
+            
             FPrintf(file_handle, "\n");
             
-            FPrintf(file_handle, "@{b}%s@{ub}\n", doc->name);
+            FPrintf(file_handle, "@{b}%s@{ub}\n", doc->function_name);
             FPrintf(file_handle, "\n");
             
             if (doc->synopsis) {
@@ -1067,9 +1312,9 @@ BOOL generate_guide_output(Config *config)
                 FPrintf(file_handle, "%s\n\n", doc->see_also);
             }
             
-            FPrintf(file_handle, "@{link \"main\"}Back to Main@{link}\n");
+            FPrintf(file_handle, "@{\"main\" link \"Back to Main\"}\n");
             FPrintf(file_handle, "\n");
-            FPrintf(file_handle, "@ENDNODE\n");
+            FPrintf(file_handle, "@EndNode\n");
         }
     }
     
@@ -1123,11 +1368,11 @@ void cleanup_config(Config *config)
 /* Print usage information */
 void print_usage(void)
 {
-    Printf("GenDo - Amiga Autodoc Generator v1.0\n");
+    Printf("GenDo - Amiga Documentation Generator v1.0\n");
     Printf("Usage: GenDo FILES=file1,file2,... TO=output.doc [AMIGAGUIDE] [options]\n");
     Printf("\n");
     Printf("Parameters:\n");
-    Printf("  FILES=file1,file2,...  Source files to process (supports wildcards)\n");
+    Printf("  FILES=file1,file2,...  Source files to process (supports Amiga wildcards)\n");
     Printf("  TO=filename.doc        Output .doc file\n");
     Printf("  AMIGAGUIDE            Generate AmigaGuide output (.guide file)\n");
     Printf("  VERBOSE               Show verbose output\n");
@@ -1136,11 +1381,8 @@ void print_usage(void)
     Printf("  CONVERTCOMMENTS       Convert comments (default)\n");
     Printf("  NOFORMFEED            Disable form feeds\n");
     Printf("  NOTOC                 Disable table of contents\n");
-    Printf("\n");
-    Printf("Examples:\n");
-    Printf("  GenDo #?.c TO mylib.doc\n");
-    Printf("  GenDo #?.c #?.cpp TO mylib.doc AMIGAGUIDE\n");
-    Printf("  GenDo file1.c file2.c TO output.doc VERBOSE\n");
+    Printf("  PRESERVEORDER         Preserve original order (don't sort alphabetically)\n");
+
 }
 
 /* Main entry point */
@@ -1185,6 +1427,11 @@ int main(int argc, char *argv[])
         Printf("GenDo: Failed to process source files\n");
         result = RETURN_FAIL;
         goto cleanup;
+    }
+    
+    /* Sort autodocs alphabetically unless preserve order is requested */
+    if (!config.preserve_order) {
+        sort_autodocs(&config);
     }
     
     /* Check if any autodocs were found */
