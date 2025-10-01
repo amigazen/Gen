@@ -75,11 +75,13 @@ typedef struct {
 typedef struct {
     STRPTR output_doc;
     STRPTR output_guide;
+    STRPTR output_html_dir;
     SourceFile *source_files;
     LONG file_count;
     Autodoc *autodocs;
     LONG autodoc_count;
     BOOL generate_guide;
+    BOOL generate_html;
     BOOL verbose;
     LONG line_length;
     BOOL word_wrap;
@@ -105,6 +107,7 @@ void store_section_content(Autodoc *autodoc, const char *section, const char *co
 STRPTR read_autodoc_line(BPTR file);
 BOOL generate_doc_output(Config *config);
 BOOL generate_guide_output(Config *config);
+BOOL generate_html_output(Config *config);
 void cleanup_config(Config *config);
 void print_usage(void);
 LONG expand_wildcards(Config *config, STRPTR *file_array, LONG file_count);
@@ -435,8 +438,8 @@ LONG parse_command_line(Config *config, LONG argc, STRPTR *argv)
     struct RDArgs *rdargs;
     
     /* Template for ReadArgs */
-    static UBYTE template[] = "FILES/M/A,TO/K,AMIGAGUIDE/S,VERBOSE/S,LINELENGTH/N,WORDWRAP/S,CONVERTCOMMENTS/S,NOFORMFEED/S,NOTOC/S,PRESERVEORDER/S";
-    LONG args[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}; /* files, to, amigaguide, verbose, linelength, wordwrap, convertcomments, noformfeed, notoc, preserveorder */
+    static UBYTE template[] = "FILES/M/A,TO/K,AMIGAGUIDE/S,HTML/S,VERBOSE/S,LINELENGTH/N,WORDWRAP/S,CONVERTCOMMENTS/S,NOFORMFEED/S,NOTOC/S,PRESERVEORDER/S";
+    LONG args[11] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}; /* files, to, amigaguide, html, verbose, linelength, wordwrap, convertcomments, noformfeed, notoc, preserveorder */
     
     /* Initialize config */
     config->output_doc = NULL;
@@ -495,13 +498,14 @@ LONG parse_command_line(Config *config, LONG argc, STRPTR *argv)
     }
     
     if (args[2]) config->generate_guide = TRUE;
-    if (args[3]) config->verbose = TRUE;
-    if (args[4]) config->line_length = (LONG)args[4];
-    if (args[5]) config->word_wrap = TRUE;
-    if (args[6]) config->convert_comments = TRUE;
-    if (args[7]) config->no_form_feed = TRUE;
-    if (args[8]) config->no_toc = TRUE;
-    if (args[9]) config->preserve_order = TRUE;
+    if (args[3]) config->generate_html = TRUE;
+    if (args[4]) config->verbose = TRUE;
+    if (args[5]) config->line_length = (LONG)args[5];
+    if (args[6]) config->word_wrap = TRUE;
+    if (args[7]) config->convert_comments = TRUE;
+    if (args[8]) config->no_form_feed = TRUE;
+    if (args[9]) config->no_toc = TRUE;
+    if (args[10]) config->preserve_order = TRUE;
     
     /* Validate required arguments - output_doc already validated above */
     
@@ -527,6 +531,23 @@ LONG parse_command_line(Config *config, LONG argc, STRPTR *argv)
                 strcpy(dot, ".guide");
             } else {
                 strcpy(config->output_guide + doc_len, ".guide");
+            }
+        }
+    }
+    
+    if (config->generate_html) {
+        /* Generate HTML directory name from doc filename */
+        LONG doc_len = strlen(config->output_doc);
+        char *dot;
+        config->output_html_dir = AllocVec(doc_len + 8, MEMF_CLEAR);
+        if (config->output_html_dir) {
+            strcpy(config->output_html_dir, config->output_doc);
+            /* Replace .doc with _html */
+            dot = strchr(config->output_html_dir, '.');
+            if (dot) {
+                strcpy(dot, "_html");
+            } else {
+                strcpy(config->output_html_dir + doc_len, "_html");
             }
         }
     }
@@ -904,11 +925,11 @@ STRPTR clean_content(const char *content)
                 *dst++ = (unsigned char)0xF0;
                 src++; /* Skip the second byte */
             } else if ((unsigned char)*src == 0xC3 && (unsigned char)*(src+1) == 0x80) {
-                /* UTF-8 À (0xC3 0x80) -> Latin-1 À (0xC0) */
+                /* UTF-8 ï¿½ (0xC3 0x80) -> Latin-1 ï¿½ (0xC0) */
                 *dst++ = (unsigned char)0xC0;
                 src++; /* Skip the second byte */
             } else if ((unsigned char)*src == 0xC3 && (unsigned char)*(src+1) == 0x9F) {
-                /* UTF-8 ß (0xC3 0x9F) -> Latin-1 ß (0xDF) */
+                /* UTF-8 ï¿½ (0xC3 0x9F) -> Latin-1 ï¿½ (0xDF) */
                 *dst++ = (unsigned char)0xDF;
                 src++; /* Skip the second byte */
             } else {
@@ -1320,15 +1341,221 @@ BOOL generate_guide_output(Config *config)
     return TRUE;
 }
 
+/* Generate HTML output */
+BOOL generate_html_output(Config *config)
+{
+    BPTR file_handle;
+    LONG i, j;
+    Autodoc *doc;
+    char *index_path;
+    char *function_path;
+    LONG index_len, function_len;
+    
+    /* Create HTML directory */
+    if (CreateDir(config->output_html_dir) != 0) {
+        Printf("GenDo: Failed to create HTML directory: %s\n", config->output_html_dir);
+        return FALSE;
+    }
+    
+    /* Generate index.html path */
+    index_len = strlen(config->output_html_dir) + 12; /* "/index.html" */
+    index_path = AllocVec(index_len, MEMF_CLEAR);
+    if (!index_path) {
+        Printf("GenDo: Out of memory\n");
+        return FALSE;
+    }
+    sprintf(index_path, "%s/index.html", config->output_html_dir);
+    
+    /* Create index.html */
+    file_handle = Open(index_path, MODE_NEWFILE);
+    if (!file_handle) {
+        Printf("GenDo: Failed to create index.html\n");
+        FreeVec(index_path);
+        return FALSE;
+    }
+    
+    /* Write HTML header */
+    FPrintf(file_handle, "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 3.2//EN\">\n");
+    FPrintf(file_handle, "<html>\n");
+    FPrintf(file_handle, "<head>\n");
+    FPrintf(file_handle, "<title>%s</title>\n", config->output_doc);
+    FPrintf(file_handle, "</head>\n");
+    FPrintf(file_handle, "<body>\n");
+    FPrintf(file_handle, "<h1>%s</h1>\n", config->output_doc);
+    FPrintf(file_handle, "<h3>FUNCTIONS</h3>\n");
+    FPrintf(file_handle, "<div class=\"sectionbody\">\n");
+    FPrintf(file_handle, "<table width=\"100%%\">\n");
+    
+    /* Write function table - 5 columns */
+    for (i = 0; i < config->autodoc_count; i += 5) {
+        FPrintf(file_handle, "<tr>\n");
+        for (j = 0; j < 5 && (i + j) < config->autodoc_count; j++) {
+            if (config->autodocs[i + j].function_name) {
+                FPrintf(file_handle, "<td width=\"20%%\"><a href=\"%s.html\">%s</a></td>\n", 
+                        config->autodocs[i + j].function_name, 
+                        config->autodocs[i + j].function_name);
+            } else {
+                FPrintf(file_handle, "<td width=\"20%%\"></td>\n");
+            }
+        }
+        /* Fill remaining columns if needed */
+        for (; j < 5; j++) {
+            FPrintf(file_handle, "<td width=\"20%%\"></td>\n");
+        }
+        FPrintf(file_handle, "</tr>\n");
+    }
+    
+    FPrintf(file_handle, "</table>\n");
+    FPrintf(file_handle, "</div><br>\n");
+    FPrintf(file_handle, "</body>\n");
+    FPrintf(file_handle, "</html>\n");
+    
+    Close(file_handle);
+    FreeVec(index_path);
+    
+    /* Generate individual function pages */
+    for (i = 0; i < config->autodoc_count; i++) {
+        doc = &config->autodocs[i];
+        
+        if (!doc->function_name) continue;
+        
+        /* Generate function HTML path */
+        function_len = strlen(config->output_html_dir) + strlen(doc->function_name) + 6; /* "/.html" */
+        function_path = AllocVec(function_len, MEMF_CLEAR);
+        if (!function_path) {
+            Printf("GenDo: Out of memory for function %s\n", doc->function_name);
+            continue;
+        }
+        sprintf(function_path, "%s/%s.html", config->output_html_dir, doc->function_name);
+        
+        /* Create function HTML file */
+        file_handle = Open(function_path, MODE_NEWFILE);
+        if (!file_handle) {
+            Printf("GenDo: Failed to create %s.html\n", doc->function_name);
+            FreeVec(function_path);
+            continue;
+        }
+        
+        /* Write HTML header */
+        FPrintf(file_handle, "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 3.2//EN\">\n");
+        FPrintf(file_handle, "<html>\n");
+        FPrintf(file_handle, "<head>\n");
+        FPrintf(file_handle, "<title>%s</title>\n", doc->function_name);
+        FPrintf(file_handle, "</head>\n");
+        FPrintf(file_handle, "<body>\n");
+        
+        /* Write NAME section */
+        if (doc->name) {
+            FPrintf(file_handle, "<h3>NAME</h3>\n");
+            FPrintf(file_handle, "<div class=\"sectionbody\">\n");
+            FPrintf(file_handle, "<dl>\n");
+            FPrintf(file_handle, "<dt>%s</dt>\n", doc->function_name);
+            FPrintf(file_handle, "<dd>\n");
+            FPrintf(file_handle, "%s<br><br>\n", doc->name);
+            FPrintf(file_handle, "</dd>\n");
+            FPrintf(file_handle, "</dl>\n");
+            FPrintf(file_handle, "</div>\n");
+        }
+        
+        /* Write SYNOPSIS section */
+        if (doc->synopsis) {
+            FPrintf(file_handle, "<h3>SYNOPSIS</h3>\n");
+            FPrintf(file_handle, "<div class=\"sectionbody\">\n");
+            FPrintf(file_handle, "<div class=\"codesectionbody\">\n");
+            FPrintf(file_handle, "%s<br><br>\n", doc->synopsis);
+            FPrintf(file_handle, "</div>\n");
+            FPrintf(file_handle, "</div>\n");
+        }
+        
+        /* Write FUNCTION section */
+        if (doc->function_desc) {
+            FPrintf(file_handle, "<h3>FUNCTION</h3>\n");
+            FPrintf(file_handle, "<div class=\"sectionbody\">\n");
+            FPrintf(file_handle, "%s<br><br>\n", doc->function_desc);
+            FPrintf(file_handle, "</div>\n");
+        }
+        
+        /* Write INPUTS section */
+        if (doc->inputs) {
+            FPrintf(file_handle, "<h3>INPUTS</h3>\n");
+            FPrintf(file_handle, "<div class=\"sectionbody\">\n");
+            FPrintf(file_handle, "<dl>\n");
+            FPrintf(file_handle, "%s\n", doc->inputs);
+            FPrintf(file_handle, "</dl>\n");
+            FPrintf(file_handle, "</div>\n");
+        }
+        
+        /* Write RESULT section */
+        if (doc->result) {
+            FPrintf(file_handle, "<h3>RESULT</h3>\n");
+            FPrintf(file_handle, "<div class=\"sectionbody\">\n");
+            FPrintf(file_handle, "<dl>\n");
+            FPrintf(file_handle, "%s\n", doc->result);
+            FPrintf(file_handle, "</dl>\n");
+            FPrintf(file_handle, "</div>\n");
+        }
+        
+        /* Write NOTES section */
+        if (doc->notes) {
+            FPrintf(file_handle, "<h3>NOTES</h3>\n");
+            FPrintf(file_handle, "<div class=\"sectionbody\">\n");
+            FPrintf(file_handle, "%s<br><br>\n", doc->notes);
+            FPrintf(file_handle, "</div>\n");
+        }
+        
+        /* Write BUGS section */
+        if (doc->bugs) {
+            FPrintf(file_handle, "<h3>BUGS</h3>\n");
+            FPrintf(file_handle, "<div class=\"sectionbody\">\n");
+            FPrintf(file_handle, "%s<br><br>\n", doc->bugs);
+            FPrintf(file_handle, "</div>\n");
+        }
+        
+        /* Write EXAMPLE section */
+        if (doc->example) {
+            FPrintf(file_handle, "<h3>EXAMPLE</h3>\n");
+            FPrintf(file_handle, "<div class=\"sectionbody\">\n");
+            FPrintf(file_handle, "<div class=\"codesectionbody\">\n");
+            FPrintf(file_handle, "%s<br><br>\n", doc->example);
+            FPrintf(file_handle, "</div>\n");
+            FPrintf(file_handle, "</div>\n");
+        }
+        
+        /* Write SEE ALSO section */
+        if (doc->see_also) {
+            FPrintf(file_handle, "<h3>SEE ALSO</h3>\n");
+            FPrintf(file_handle, "<div class=\"sectionbody\">\n");
+            FPrintf(file_handle, "%s<br><br>\n", doc->see_also);
+            FPrintf(file_handle, "</div>\n");
+        }
+        
+        FPrintf(file_handle, "</body>\n");
+        FPrintf(file_handle, "</html>\n");
+        
+        Close(file_handle);
+        FreeVec(function_path);
+    }
+    
+    return TRUE;
+}
+
 /* Clean up configuration and allocated memory */
 void cleanup_config(Config *config)
 {
     LONG i;
     Autodoc *doc;
     
-    /* Free output_doc and output_guide - they are now allocated memory */
+    /* Free output_doc, output_guide, and output_html_dir - they are now allocated memory */
     if (config->output_doc) {
         FreeVec(config->output_doc);
+    }
+    
+    if (config->output_guide) {
+        FreeVec(config->output_guide);
+    }
+    
+    if (config->output_html_dir) {
+        FreeVec(config->output_html_dir);
     }
     
     if (config->source_files) {
@@ -1367,12 +1594,13 @@ void cleanup_config(Config *config)
 void print_usage(void)
 {
     Printf("GenDo - Amiga Documentation Generator v1.0\n");
-    Printf("Usage: GenDo FILES=file1,file2,... TO=output.doc [AMIGAGUIDE] [options]\n");
+    Printf("Usage: GenDo FILES=file1,file2,... TO=output.doc [AMIGAGUIDE] [HTML] [options]\n");
     Printf("\n");
     Printf("Parameters:\n");
     Printf("  FILES=file1,file2,...  Source files to process (supports Amiga wildcards)\n");
     Printf("  TO=filename.doc        Output .doc file\n");
     Printf("  AMIGAGUIDE            Generate AmigaGuide output (.guide file)\n");
+    Printf("  HTML                   Generate HTML output (folder with index.html)\n");
     Printf("  VERBOSE               Show verbose output\n");
     Printf("  LINELENGTH=n          Set line length (default: 78)\n");
     Printf("  WORDWRAP              Enable word wrapping (default)\n");
@@ -1455,7 +1683,18 @@ int main(int argc, char *argv[])
             goto cleanup;
         }
         Printf("GenDo: Generated %s and %s\n", config.output_doc, config.output_guide);
-    } else {
+    }
+    
+    if (config.generate_html) {
+        if (!generate_html_output(&config)) {
+            Printf("GenDo: Failed to generate HTML output\n");
+            result = RETURN_FAIL;
+            goto cleanup;
+        }
+        Printf("GenDo: Generated HTML documentation in %s/\n", config.output_html_dir);
+    }
+    
+    if (!config.generate_guide && !config.generate_html) {
         Printf("GenDo: Generated %s\n", config.output_doc);
     }
     
