@@ -4,36 +4,42 @@ NAME
        GenDo - Amiga Autodoc Generator Command Line Tool
 
 SYNOPSIS
-       GenDo [INPUT=files] [TO=file] [AMIGAGUIDE] [PRESERVEORDER] [VERBOSE] [HELP]
+       GenDo [FILES=files] [TO=file] [AMIGAGUIDE] [HTML] [PRESERVEORDER] [VERBOSE] [HELP] [LINELENGTH=n] [WORDWRAP] [CONVERTCOMMENTS] [NOFORMFEED] [NOTOC]
 
-       GenDo #?.c #?.cpp TO mylib.doc
+       GenDo #?.c #?.cpp TO mylib.doc [AMIGAGUIDE] [HTML]
 
 DESCRIPTION
        GenDo is a command line tool for Amiga that generates autodoc documentation
        from C/C++ source files containing autodoc comments. The tool can process
        multiple input files and generate both .doc and .guide output formats.
 
-       The tool can operate in two modes:
-       1. Single file processing (direct mode)
-       2. Multiple file processing with wildcard patterns (batch mode)
-
-       Either INPUT or wildcard patterns must be provided. The tool supports
-       AmigaDOS wildcard patterns for batch processing of multiple files.
+       The tool always generates autodoc documentation (.doc format) and can
+       optionally generate additional AmigaGuide (.guide) and HTML output formats.
+       The tool supports Amiga wildcard patterns for batch processing of
+       multiple files and can generate HTML documentation with individual
+       function pages.
 
 PARAMETERS
-       INPUT=files
+       FILES=files
               Input source files containing autodoc comments. Multiple files
               can be specified separated by spaces. Supports C and C++ files.
+              Can use AmigaDOS wildcard patterns like #?.c
 
        TO=file
               Output filename for the generated documentation (mandatory).
               The .doc extension is automatically added if not specified.
               For AmigaGuide output, .guide extension is used.
+              For HTML output, creates a folder with the base name (i.e. no extension).
 
        AMIGAGUIDE
               Generate AmigaGuide format output (.guide file) in addition to
               the standard .doc format. Creates a hyperlinked documentation
               with table of contents and navigation.
+
+       HTML   Generate HTML output (folder with index.html) in addition to
+              the standard .doc format. Creates individual HTML pages for
+              each function with proper navigation and styling.
+              The HTML folder uses the base name of the output file (i.e. no extension).
 
        PRESERVEORDER
               Preserve the original order of functions in the output instead
@@ -44,24 +50,26 @@ PARAMETERS
               Enable verbose output showing processing details, file parsing
               status, and debug information.
 
-       HELP   Display usage information and exit.
+       LINELENGTH=n
+              Set maximum line length for output (default: 78 characters).
+              Controls text wrapping and formatting.
 
-WILDCARD PATTERNS
-       GenDo supports AmigaDOS wildcard patterns for processing multiple files:
+       WORDWRAP
+              Enable word wrapping for long lines (default: enabled).
+              Automatically wraps text to fit within specified line length.
 
-       #       Matches any single character
-       ?       Matches any single character (same as #)
-       *       Matches zero or more characters
-       [abc]   Matches any character in the set
-       (a|b)   Matches either 'a' or 'b'
-       ~       Matches any character except the next one
-       '       Matches the next character literally
+       CONVERTCOMMENTS
+              Convert backslashes to forward slashes in comments.
+              Useful for cross-platform compatibility.
 
-       Examples:
-              GenDo #?.c TO mylib.doc          ; All .c files
-              GenDo *.cpp TO mylib.doc         ; All .cpp files
-              GenDo test*.c TO mylib.doc       ; Files starting with 'test'
-              GenDo [a-z]*.c TO mylib.doc      ; Files starting with lowercase
+       NOFORMFEED
+              Disable form feed characters in output.
+              Prevents page breaks between sections.
+
+       NOTOC
+              Disable table of contents generation.
+              Reduces output size for simple documentation.
+
 
 AUTODOC FORMAT
        GenDo parses autodoc comments in the following format:
@@ -103,19 +111,37 @@ AUTODOC FORMAT
 
 EXAMPLES
        Generate documentation from single file:
-              GenDo INPUT=myfile.c TO mylib.doc
+              GenDo FILES=myfile.c TO mylib.doc
 
        Generate documentation with AmigaGuide output:
-              GenDo INPUT=myfile.c TO mylib.doc AMIGAGUIDE
+              GenDo FILES=myfile.c TO mylib.doc AMIGAGUIDE
+
+       Generate documentation with HTML output:
+              GenDo FILES=myfile.c TO mylib.doc HTML
+
+       Generate documentation with both AmigaGuide and HTML:
+              GenDo FILES=myfile.c TO mylib.doc AMIGAGUIDE HTML
 
        Process multiple files with wildcards:
-              GenDo #?.c #?.cpp TO mylib.doc
+              GenDo FILES=#?.c,#?.cpp TO mylib.doc
 
        Process with verbose output and preserve order:
-              GenDo #?.c TO mylib.doc PRESERVEORDER VERBOSE
+              GenDo FILES=#?.c TO mylib.doc PRESERVEORDER VERBOSE
 
        Generate only AmigaGuide format:
-              GenDo *.c TO mylib.guide AMIGAGUIDE
+              GenDo FILES=*.c TO mylib.guide AMIGAGUIDE
+
+       Generate HTML documentation folder:
+              GenDo FILES=*.c TO mylib.doc HTML
+
+       Generate with custom line length and word wrap:
+              GenDo FILES=myfile.c TO mylib.doc LINELENGTH=100 WORDWRAP
+
+       Generate with form feed disabled:
+              GenDo FILES=myfile.c TO mylib.doc NOFORMFEED
+
+       Generate with table of contents disabled:
+              GenDo FILES=myfile.c TO mylib.doc NOTOC
 
 RETURN CODES
        0 (RETURN_OK)     Success
@@ -124,41 +150,26 @@ RETURN CODES
        20 (RETURN_FAIL)  Severe error
 
 FEATURES
-       - Parse autodoc comments from C/C++ source files
+       - Parse autodoc comments from C/C++ source files and generate Autodocs
        - Support for multiple input files with wildcard patterns
-       - Generate both .doc and .guide output formats
+       - Generate .doc, .guide, and HTML output formats
        - AmigaGuide hyperlinked documentation with navigation
+       - HTML documentation with individual function pages
+       - Smart target file naming with automatic extensions
        - Alphabetical sorting of functions (can be disabled)
-       - AmigaDOS wildcard pattern matching
        - Character encoding conversion (UTF-8 to Latin-1)
-       - Memory management with proper cleanup
-       - Verbose debug output
+       - Verbose output option
        - Table of contents generation
-       - Linear navigation between function nodes
 
-ERROR HANDLING
-       The tool provides clear error messages for:
-       - Missing mandatory parameters
-       - Invalid file paths
-       - File access errors
-       - Memory allocation failures
-       - Pattern matching errors
-       - Autodoc parsing errors
-       - Output file creation failures
 
 LIMITATIONS
        - Maximum input files: Limited by available memory
-       - Maximum autodoc entries: Limited by available memory
-       - Latin-1 encoding for output files
-       - Requires AmigaDOS pattern matching functions
-       - C89 compliant code only
+       - Maximum autodoc entries: 1000
 
 REQUIREMENTS
        - Amiga operating system 3.0 or higher
        - SAS/C compiler for building
-       - icon.library for AmigaGuide support
-       - dos.library for file operations
-       - utility.library for string functions
+
 
 BUILDING
        To build GenDo on AmigaOS:
@@ -174,13 +185,12 @@ BUILDING
               execute test_gendo
 
 NOTES
-       - INPUT files are processed in the order they appear on command line
-       - Wildcard patterns are expanded using AmigaDOS MatchFirst/MatchNext
+       - Input files are processed in the order they appear on command line
        - Function names are extracted from the NAME section of autodocs
-       - AmigaGuide output includes clickable hyperlinks and navigation
        - Output files are created in the current directory unless path specified
-       - Memory is automatically managed and freed on exit
        - Character encoding is converted from UTF-8 to Latin-1 for Amiga compatibility
+       - HTML folders are created with the base name of the output file, without any extension
+       - Smart filename handling automatically adds .doc extension if missing
 
 AUTHOR
        GenDo is part of the amigazen project ToolKit Gen extension.
@@ -190,31 +200,28 @@ AUTHOR
 
 VERSION HISTORY
        v1.0 - Initial release
-              - Basic autodoc parsing from C/C++ source files
+              - Extract autodocs parsing from C/C++ source files
               - Multiple file processing with wildcard support
               - .doc format output generation
               - AmigaGuide format output generation
               - Alphabetical sorting of functions
-              - AmigaDOS wildcard pattern matching
-              - Character encoding conversion
-              - Memory management and error handling
-              - Verbose debug output
-              - Table of contents and navigation
+
+       v1.1 - Enhanced release
+              - HTML output generation with individual function pages
+              - Smart target file naming with automatic .doc extension
+              - HTML folder generation with index.html and navigation
+              - Base name extraction for guide and HTML file naming
+              - Filename validation (no multiple extensions)
 
 TODO
-       - Support for additional autodoc sections
-       - Enhanced error reporting
-       - Configuration file support
-       - Batch processing optimizations
-       - Additional output formats
+
 
 SEE ALSO
-       dos.library(3), utility.library(3), icon.library(3),
-       intuition.library(3), graphics.library(3)
+       GenIn, GenMaki
 
 BUGS
        None currently known.
 
        Please report bugs to the amigazen project at github.com/amigazen/Gen
 
-Gen                         2025-09-01                          GENDO(1)
+Gen                         2025-10-02                          GENDO(1)

@@ -25,6 +25,8 @@
 #include <dos/dosextens.h>
 #include <utility/tagitem.h>
 #include <utility/utility.h>
+
+#include <stdio.h>
 #include <ctype.h>
 #include <string.h>
 
@@ -33,7 +35,7 @@
 #include <proto/utility.h>
 
 /* Version and stack information */
-static const char *verstag = "$VER: GenDo 1.0 (01/10/25)";
+static const char *verstag = "$VER: GenDo 1.1 (02/10/25)";
 static const char *stack_cookie = "$STACK: 8192";
 
 /* Global library bases */
@@ -94,6 +96,8 @@ typedef struct {
 /* Function prototypes */
 LONG parse_command_line(Config *config, LONG argc, STRPTR *argv);
 BOOL process_source_files(Config *config);
+STRPTR process_output_filename(const char *filename);
+STRPTR get_base_name(const char *filename);
 void sort_autodocs(Config *config);
 BOOL parse_autodoc_from_file(SourceFile *file, Config *config);
 BOOL is_autodoc_start(const char *line);
@@ -123,6 +127,70 @@ STRPTR strdup_amiga(const char *str)
         strcpy(copy, str);
     }
     return copy;
+}
+
+/* Helper function to extract base name and validate filename */
+STRPTR process_output_filename(const char *filename)
+{
+    STRPTR result;
+    LONG len;
+    char *last_dot;
+    
+    if (!filename) return NULL;
+    
+    len = strlen(filename);
+    last_dot = strrchr(filename, '.');
+    
+    /* Check for confusing filenames like .lib.doc */
+    if (last_dot && last_dot != filename) {
+        /* Check if there's another dot before the last one */
+        char *temp = last_dot - 1;
+        while (temp > filename && *temp != '.') temp--;
+        if (temp > filename && *temp == '.') {
+            Printf("GenDo: Confusing filename '%s' - multiple extensions not allowed\n", filename);
+            return NULL;
+        }
+    }
+    
+    /* Allocate space for result */
+    result = AllocVec(len + 5, MEMF_CLEAR); /* +5 for ".doc" + null terminator */
+    if (!result) return NULL;
+    
+    if (last_dot && strcmp(last_dot, ".doc") == 0) {
+        /* Already has .doc extension */
+        strcpy(result, filename);
+    } else {
+        /* Add .doc extension */
+        strcpy(result, filename);
+        strcat(result, ".doc");
+    }
+    
+    return result;
+}
+
+/* Helper function to get base name (without extension) */
+STRPTR get_base_name(const char *filename)
+{
+    STRPTR result;
+    char *last_dot;
+    LONG len;
+    
+    if (!filename) return NULL;
+    
+    last_dot = strrchr(filename, '.');
+    if (last_dot) {
+        len = last_dot - filename;
+    } else {
+        len = strlen(filename);
+    }
+    
+    result = AllocVec(len + 1, MEMF_CLEAR);
+    if (result) {
+        strncpy(result, filename, len);
+        result[len] = '\0';
+    }
+    
+    return result;
 }
 
 /* Check if line is a section header and return the section name */
@@ -342,6 +410,7 @@ LONG expand_wildcards(Config *config, STRPTR *file_array, LONG file_count)
         } else if (err == ERROR_OBJECT_NOT_FOUND) {
             /* Pattern doesn't match anything, try as literal filename */
             BPTR fh = Open(file_array[i], MODE_OLDFILE);
+            STRPTR file_path = NULL;
             if (fh) {
                 Close(fh);
                 /* File exists, add it directly */
@@ -367,7 +436,14 @@ LONG expand_wildcards(Config *config, STRPTR *file_array, LONG file_count)
                     }
                 }
                 
-                expanded_files[expanded_count] = strdup_amiga(file_array[i]);
+                file_path = AllocVec(strlen(file_array[i]) + 1, MEMF_CLEAR);
+                if (file_path) {
+                    strcpy(file_path, file_array[i]);
+                    expanded_files[expanded_count] = file_path;
+                } else {
+                    /* Out of memory, skip this file */
+                    continue;
+                }
                 expanded_count++;
                 
                 if (config->verbose) {
@@ -444,11 +520,13 @@ LONG parse_command_line(Config *config, LONG argc, STRPTR *argv)
     /* Initialize config */
     config->output_doc = NULL;
     config->output_guide = NULL;
+    config->output_html_dir = NULL;
     config->source_files = NULL;
     config->file_count = 0;
     config->autodocs = NULL;
     config->autodoc_count = 0;
     config->generate_guide = FALSE;
+    config->generate_html = FALSE;
     config->verbose = FALSE;
     config->line_length = 78;
     config->word_wrap = TRUE;
@@ -485,9 +563,9 @@ LONG parse_command_line(Config *config, LONG argc, STRPTR *argv)
     
     /* Set other arguments */
     if (args[1]) {
-        config->output_doc = strdup_amiga((STRPTR)args[1]);
+        config->output_doc = process_output_filename((STRPTR)args[1]);
         if (!config->output_doc) {
-            Printf("GenDo: Out of memory for output filename\n");
+            Printf("GenDo: Invalid output filename or out of memory\n");
             FreeArgs(rdargs);
             return RETURN_FAIL;
         }
@@ -519,36 +597,30 @@ LONG parse_command_line(Config *config, LONG argc, STRPTR *argv)
     }
     
     if (config->generate_guide) {
-        /* Generate guide filename from doc filename */
-        LONG doc_len = strlen(config->output_doc);
-        char *dot;
-        config->output_guide = AllocVec(doc_len + 8, MEMF_CLEAR);
-        if (config->output_guide) {
-            strcpy(config->output_guide, config->output_doc);
-            /* Replace .doc with .guide */
-            dot = strchr(config->output_guide, '.');
-            if (dot) {
-                strcpy(dot, ".guide");
-            } else {
-                strcpy(config->output_guide + doc_len, ".guide");
+        /* Generate guide filename from base name */
+        STRPTR base_name = get_base_name(config->output_doc);
+        if (base_name) {
+            LONG base_len = strlen(base_name);
+            config->output_guide = AllocVec(base_len + 8, MEMF_CLEAR);
+            if (config->output_guide) {
+                strcpy(config->output_guide, base_name);
+                strcat(config->output_guide, ".guide");
             }
+            FreeVec(base_name);
         }
     }
     
     if (config->generate_html) {
-        /* Generate HTML directory name from doc filename */
-        LONG doc_len = strlen(config->output_doc);
-        char *dot;
-        config->output_html_dir = AllocVec(doc_len + 8, MEMF_CLEAR);
-        if (config->output_html_dir) {
-            strcpy(config->output_html_dir, config->output_doc);
-            /* Replace .doc with _html */
-            dot = strchr(config->output_html_dir, '.');
-            if (dot) {
-                strcpy(dot, "_html");
-            } else {
-                strcpy(config->output_html_dir + doc_len, "_html");
+        /* Generate HTML directory name from base name */
+        STRPTR base_name = get_base_name(config->output_doc);
+        if (base_name) {
+            LONG base_len = strlen(base_name);
+            config->output_html_dir = AllocVec(base_len + 6, MEMF_CLEAR);
+            if (config->output_html_dir) {
+                strcpy(config->output_html_dir, base_name);
+                strcat(config->output_html_dir, "_html");
             }
+            FreeVec(base_name);
         }
     }
     
@@ -1224,7 +1296,7 @@ BOOL generate_guide_output(Config *config)
     FPrintf(file_handle, "@Prev \"main\"\n");
     FPrintf(file_handle, "\n");
     FPrintf(file_handle, "Amiga Autodoc Documentation\n");
-    FPrintf(file_handle, "Generated by GenDo v1.0\n");
+    FPrintf(file_handle, "Generated by GenDo v1.1\n");
     FPrintf(file_handle, "\n");
     FPrintf(file_handle, "$VER: %s 1.0 (Generated by GenDo)\n", config->output_guide);
     FPrintf(file_handle, "\n");
@@ -1352,24 +1424,41 @@ BOOL generate_html_output(Config *config)
     LONG index_len, function_len;
     
     /* Create HTML directory */
-    if (CreateDir(config->output_html_dir) != 0) {
-        Printf("GenDo: Failed to create HTML directory: %s\n", config->output_html_dir);
-        return FALSE;
+    BPTR dir_lock = Lock(config->output_html_dir, ACCESS_READ);
+    if (dir_lock) {
+        UnLock(dir_lock);
+        /* Directory already exists, that's fine */
+        if (config->verbose) {
+            Printf("GenDo: HTML directory already exists: %s\n", config->output_html_dir);
+        }
+    } else {
+        /* Directory doesn't exist, try to create it */
+        BPTR new_dir_lock = CreateDir(config->output_html_dir);
+        if (new_dir_lock) {
+            /* Directory created successfully, unlock the exclusive lock */
+            UnLock(new_dir_lock);
+            if (config->verbose) {
+                Printf("GenDo: Created HTML directory: %s\n", config->output_html_dir);
+            }
+        } else {
+            Printf("GenDo: Failed to create HTML directory: %s (Error: %ld)\n", config->output_html_dir, IoErr());
+            return FALSE;
+        }
     }
     
     /* Generate index.html path */
-    index_len = strlen(config->output_html_dir) + 12; /* "/index.html" */
+    index_len = strlen(config->output_html_dir) + 12; /* "/index.html" + null terminator */
     index_path = AllocVec(index_len, MEMF_CLEAR);
     if (!index_path) {
         Printf("GenDo: Out of memory\n");
         return FALSE;
     }
-    sprintf(index_path, "%s/index.html", config->output_html_dir);
+    SNPrintf(index_path, index_len, "%s/index.html", config->output_html_dir);
     
     /* Create index.html */
     file_handle = Open(index_path, MODE_NEWFILE);
     if (!file_handle) {
-        Printf("GenDo: Failed to create index.html\n");
+        Printf("GenDo: Failed to create index.html (Error: %ld)\n", IoErr());
         FreeVec(index_path);
         return FALSE;
     }
@@ -1420,18 +1509,18 @@ BOOL generate_html_output(Config *config)
         if (!doc->function_name) continue;
         
         /* Generate function HTML path */
-        function_len = strlen(config->output_html_dir) + strlen(doc->function_name) + 6; /* "/.html" */
+        function_len = strlen(config->output_html_dir) + strlen(doc->function_name) + 7; /* "/.html" + null terminator */
         function_path = AllocVec(function_len, MEMF_CLEAR);
         if (!function_path) {
             Printf("GenDo: Out of memory for function %s\n", doc->function_name);
             continue;
         }
-        sprintf(function_path, "%s/%s.html", config->output_html_dir, doc->function_name);
+        SNPrintf(function_path, function_len, "%s/%s.html", config->output_html_dir, doc->function_name);
         
         /* Create function HTML file */
         file_handle = Open(function_path, MODE_NEWFILE);
         if (!file_handle) {
-            Printf("GenDo: Failed to create %s.html\n", doc->function_name);
+            Printf("GenDo: Failed to create %s.html (Error: %ld)\n", doc->function_name, IoErr());
             FreeVec(function_path);
             continue;
         }
@@ -1545,11 +1634,8 @@ void cleanup_config(Config *config)
     LONG i;
     Autodoc *doc;
     
-    /* Free output_doc, output_guide, and output_html_dir - they are now allocated memory */
-    if (config->output_doc) {
-        FreeVec(config->output_doc);
-    }
-    
+    /* Free output_guide and output_html_dir - they are allocated with AllocVec() */
+    /* Note: output_doc comes from ReadArgs and is freed by FreeArgs() */
     if (config->output_guide) {
         FreeVec(config->output_guide);
     }
@@ -1593,7 +1679,7 @@ void cleanup_config(Config *config)
 /* Print usage information */
 void print_usage(void)
 {
-    Printf("GenDo - Amiga Documentation Generator v1.0\n");
+    Printf("GenDo - Amiga Documentation Generator v1.1\n");
     Printf("Usage: GenDo FILES=file1,file2,... TO=output.doc [AMIGAGUIDE] [HTML] [options]\n");
     Printf("\n");
     Printf("Parameters:\n");

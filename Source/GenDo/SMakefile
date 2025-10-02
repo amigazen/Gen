@@ -35,7 +35,7 @@ clean:
 
 # Install rule
 install: $(TARGET)
-	copy $(TARGET) TO c:$(TARGET)
+	copy $(TARGET) TO //SDK/C/$(TARGET)
 
 # Dependencies
 gendo.o: gendo.c
